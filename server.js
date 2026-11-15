@@ -172,12 +172,13 @@ wss.on('connection', ws => {
   ws.on('close', () => { leave(p); peers.delete(p.id); });
   ws.on('error', () => {});
 });
-// Derruba conexoes mortas (e mantem vivas as boas atras do proxy do Render).
+// Derruba conexoes mortas (aba fechada, celular sem sinal) em ate ~10 s:
+// o proxy do Render nem sempre repassa o fechamento, entao o servidor pergunta "ainda esta ai?" a cada 5 s.
 setInterval(() => {
   for (const p of peers.values()) {
-    if (!p.alive) { p.ws.terminate(); continue; }
+    if (!p.alive) { p.ws.terminate(); leave(p); peers.delete(p.id); continue; }
     p.alive = false; try { p.ws.ping(); } catch (e) {}
   }
-}, 25000);
+}, 5000);
 
 server.listen(PORT, () => console.log('Robot Fatal Shooter server na porta ' + PORT + (SUPABASE_URL ? '' : ' (sem Supabase configurado)')));
