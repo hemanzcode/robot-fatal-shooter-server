@@ -153,10 +153,17 @@ const server = http.createServer((req, res) => {
     res.writeHead(302, { location: DOWNLOAD_URL }); res.end(); return;
   }
   const file = path.join(__dirname, 'public', url === '/' ? 'index.html' : path.normalize(url).replace(/^([\\/]|\.\.)+/, ''));
-  fs.readFile(file, (err, data) => {
-    if (err) { res.writeHead(404); res.end('nao encontrado'); return; }
-    res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' });
-    res.end(data);
+  // sem cache "as cegas": o navegador sempre confere se o arquivo mudou (evita misturar build velho com novo)
+  fs.stat(file, (err, st) => {
+    if (err || !st.isFile()) { res.writeHead(404); res.end('nao encontrado'); return; }
+    const etag = '"' + st.size.toString(16) + '-' + Math.floor(st.mtimeMs).toString(16) + '"';
+    const headers = { 'content-type': MIME[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-cache', etag };
+    if (req.headers['if-none-match'] === etag) { res.writeHead(304, headers); res.end(); return; }
+    fs.readFile(file, (err2, data) => {
+      if (err2) { res.writeHead(404); res.end('nao encontrado'); return; }
+      res.writeHead(200, headers);
+      res.end(data);
+    });
   });
 });
 
