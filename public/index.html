@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robot Fatal Shooter</title>
+<style>
+  :root { --bg:#0d0b08; --panel:#17130d; --sand:#d9b36c; --ink:#f3ead9; --dim:#a39781; --ball:#2f7bff; --moloch:#ff3324; --go:#ffd91a; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 56px 24px 80px; }
+  h1 { font-size: clamp(34px, 7vw, 64px); line-height:1; letter-spacing: .02em; margin: 0 0 6px; text-wrap: balance; }
+  .bar { height:6px; width:220px; background: linear-gradient(90deg, var(--ball) 50%, var(--moloch) 50%); margin: 18px 0; }
+  .tag { color: var(--dim); letter-spacing:.12em; text-transform: uppercase; font-size: 14px; }
+  .cta { display:inline-block; margin: 28px 0 8px; padding: 16px 30px; background: var(--go); color:#111; font-weight:800; text-decoration:none; letter-spacing:.04em; border-left: 8px solid #fff; }
+  .cta[aria-disabled=true] { background:#4a4334; color:#b9ad95; pointer-events:none; }
+  .cta:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+  .status { color: var(--dim); font-size: 14px; }
+  section { background: var(--panel); border-left: 4px solid var(--sand); padding: 18px 22px; margin-top: 28px; }
+  h2 { margin: 0 0 8px; font-size: 18px; letter-spacing:.08em; text-transform: uppercase; color: var(--sand); }
+  ol, ul { margin: 0; padding-left: 20px; }
+  li { margin: 4px 0; }
+  b.ball { color: var(--ball); } b.moloch { color: var(--moloch); }
+</style>
+</head>
+<body>
+<main>
+  <div class="tag">FPS tático 5 x 5 &nbsp;//&nbsp; Windows</div>
+  <h1>ROBOT FATAL SHOOTER</h1>
+  <div class="bar"></div>
+  <p><b class="ball">BALL</b> contra <b class="moloch">MOLOCH</b> em uma vila no deserto. Plante ou desarme a bomba, abra a caixa laranja e solte um dinossauro no time adversário.</p>
+  <a class="cta" id="dl" href="/download" aria-disabled="true">BAIXAR PARA WINDOWS</a>
+  <div class="status" id="st">Consultando o servidor…</div>
+
+  <section>
+    <h2>Como entrar na mesma sala</h2>
+    <ol>
+      <li>Baixe, extraia o zip e abra <b>RobotFatalShooter.exe</b>.</li>
+      <li>Em <b>JOGAR ONLINE</b>, crie sua conta (e-mail, senha e nome no jogo).</li>
+      <li><b>Jogo rápido:</b> clique no mapa e modo e você entra na partida aberta. Bots completam os times.</li>
+      <li><b>Sala privada:</b> um cria a sala e passa o código de 5 letras; o outro digita o código e entra.</li>
+    </ol>
+  </section>
+  <section>
+    <h2>Requisitos</h2>
+    <ul><li>Windows 10 ou 11, 64 bits, placa de vídeo com DirectX 12.</li><li>Conexão de internet estável. Quem cria a sala hospeda a partida.</li></ul>
+  </section>
+</main>
+<script>
+fetch('/status').then(r => r.json()).then(s => {
+  const dl = document.getElementById('dl'), st = document.getElementById('st');
+  if (s.download) dl.setAttribute('aria-disabled', 'false');
+  st.textContent = (s.download ? '' : 'Download ainda não publicado. ') + s.online + ' jogador(es) online agora, ' + s.rooms + ' sala(s) aberta(s).';
+}).catch(() => { document.getElementById('st').textContent = 'Servidor acordando, recarregue em instantes.'; });
+</script>
+</body>
+</html>
