@@ -154,7 +154,15 @@ const server = http.createServer((req, res) => {
   }
   const file = path.join(__dirname, 'public', url === '/' ? 'index.html' : path.normalize(url).replace(/^([\\/]|\.\.)+/, ''));
   // sem cache "as cegas": o navegador sempre confere se o arquivo mudou (evita misturar build velho com novo)
-  fs.stat(file, (err, st) => {
+  let target = file;
+  try {
+    if (fs.statSync(target).isDirectory()) {
+      if (!url.endsWith('/')) { res.writeHead(301, { location: url + '/' }); res.end(); return; }
+      target = path.join(target, 'index.html');
+    }
+  } catch (e) {}
+  fs.stat(target, (err, st) => {
+    const file = target;
     if (err || !st.isFile()) { res.writeHead(404); res.end('nao encontrado'); return; }
     const etag = '"' + st.size.toString(16) + '-' + Math.floor(st.mtimeMs).toString(16) + '"';
     const headers = { 'content-type': MIME[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-cache', etag };
