@@ -31,7 +31,7 @@ function code() {
 }
 
 function roomInfo(r) {
-  return { t: 'room', code: r.code, map: r.map, mode: r.mode, priv: r.priv, host: r.host,
+  return { t: 'room', code: r.code, map: r.map, mode: r.mode, priv: r.priv, bots: r.bots, host: r.host,
     players: r.players.map(p => ({ id: p.id, name: p.name, team: p.team, agent: p.agent })) };
 }
 function broadcastRoom(r) { const m = roomInfo(r); r.players.forEach(p => send(p, m)); }
@@ -40,10 +40,18 @@ function summary() {
   const list = [];
   for (const map of MAPS) for (const mode of MODES) {
     let players = 0, n = 0;
-    for (const r of rooms.values()) if (!r.priv && r.map === map && r.mode === mode) { n++; players += r.players.length; }
+    for (const r of rooms.values()) if (!r.priv && !r.custom && r.map === map && r.mode === mode) { n++; players += r.players.length; }
     list.push({ map, mode, rooms: n, players });
   }
-  return { t: 'list', rooms: list, online: peers.size };
+  // Salas abertas (publicas) para o jogador escolher em qual entrar.
+  const open = [];
+  for (const r of rooms.values()) {
+    if (r.priv) continue;
+    const h = r.players.find(q => q.id === r.host);
+    open.push({ code: r.code, map: r.map, mode: r.mode, host: h ? h.name : '?', players: r.players.length, bots: r.bots, custom: !!r.custom });
+  }
+  open.sort((a, b) => (b.custom - a.custom) || (b.players - a.players));
+  return { t: 'list', rooms: list, open: open.slice(0, 20), online: peers.size };
 }
 
 function teamCount(r) { const c = [0, 0]; r.players.forEach(q => c[q.team]++); return c; }
@@ -57,8 +65,8 @@ function addToRoom(p, r, side) {
   broadcastRoom(r);
 }
 
-function createRoom(p, map, mode, priv, side) {
-  const r = { code: code(), map, mode, priv, host: p.id, players: [] };
+function createRoom(p, map, mode, priv, side, bots = true, custom = false) {
+  const r = { code: code(), map, mode, priv, bots, custom, host: p.id, players: [] };
   rooms.set(r.code, r);
   addToRoom(p, r, side);
   return r;
@@ -115,14 +123,20 @@ async function onMessage(p, m) {
       // Prefere a sala mais cheia que ainda tenha vaga no time escolhido.
       let best = null, bestFits = false;
       for (const r of rooms.values()) {
-        if (r.priv || r.map !== map || r.mode !== mode || r.players.length >= MAX_PLAYERS) continue;
+        if (r.priv || r.custom || r.map !== map || r.mode !== mode || r.players.length >= MAX_PLAYERS) continue;
         const fits = side > 1 || teamCount(r)[side] < TEAM_SIZE;
         if (!best || (fits && !bestFits) || (fits === bestFits && r.players.length > best.players.length)) { best = r; bestFits = fits; }
       }
       if (best && bestFits) addToRoom(p, best, side); else if (best && side > 1) addToRoom(p, best, side); else createRoom(p, map, mode, false, side);
       break;
     }
-    case 'create': leave(p); createRoom(p, pick(m.map, MAPS), pick(m.mode, MODES), true, sideOf(m)); break;
+    case 'create': {
+      // priv: so entra com o codigo; bots: false = so os jogadores convidados, sem bots completando.
+      leave(p);
+      const priv = m.priv !== false, bots = m.bots !== false;
+      createRoom(p, pick(m.map, MAPS), pick(m.mode, MODES), priv, sideOf(m), bots, true);
+      break;
+    }
     case 'join': {
       const r = rooms.get(clean(m.code, 5).toUpperCase());
       if (!r) { send(p, { t: 'error', err: 'Sala nao encontrada.' }); break; }
