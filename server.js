@@ -46,19 +46,21 @@ function summary() {
   return { t: 'list', rooms: list, online: peers.size };
 }
 
-function addToRoom(p, r) {
-  const c = [0, 0];
-  r.players.forEach(q => c[q.team]++);
-  p.team = c[0] <= c[1] ? 0 : 1;
+function teamCount(r) { const c = [0, 0]; r.players.forEach(q => c[q.team]++); return c; }
+// side: 0 BALL, 1 MOLOCH, 2 (ou ausente) automatico. Time cheio cai no outro.
+function addToRoom(p, r, side) {
+  const c = teamCount(r);
+  if ((side === 0 || side === 1) && c[side] < TEAM_SIZE) p.team = side;
+  else p.team = c[0] <= c[1] ? 0 : 1;
   p.room = r;
   r.players.push(p);
   broadcastRoom(r);
 }
 
-function createRoom(p, map, mode, priv) {
+function createRoom(p, map, mode, priv, side) {
   const r = { code: code(), map, mode, priv, host: p.id, players: [] };
   rooms.set(r.code, r);
-  addToRoom(p, r);
+  addToRoom(p, r, side);
   return r;
 }
 
@@ -86,6 +88,7 @@ async function verify(token) {
 
 const clean = (s, n) => String(s || '').replace(/[^\w \-\.]/g, '').trim().slice(0, n);
 const pick = (v, list) => list.includes(v) ? v : list[0];
+const sideOf = m => (m.side === 0 || m.side === 1) ? m.side : 2;
 
 async function onMessage(p, m) {
   if (m.t === 'hello') {
@@ -108,19 +111,23 @@ async function onMessage(p, m) {
     case 'agent': p.agent = Math.max(0, Math.min(11, m.agent | 0)); break;
     case 'quick': {
       leave(p);
-      const map = pick(m.map, MAPS), mode = pick(m.mode, MODES);
-      let best = null;
-      for (const r of rooms.values())
-        if (!r.priv && r.map === map && r.mode === mode && r.players.length < MAX_PLAYERS && (!best || r.players.length > best.players.length)) best = r;
-      if (best) addToRoom(p, best); else createRoom(p, map, mode, false);
+      const map = pick(m.map, MAPS), mode = pick(m.mode, MODES), side = sideOf(m);
+      // Prefere a sala mais cheia que ainda tenha vaga no time escolhido.
+      let best = null, bestFits = false;
+      for (const r of rooms.values()) {
+        if (r.priv || r.map !== map || r.mode !== mode || r.players.length >= MAX_PLAYERS) continue;
+        const fits = side > 1 || teamCount(r)[side] < TEAM_SIZE;
+        if (!best || (fits && !bestFits) || (fits === bestFits && r.players.length > best.players.length)) { best = r; bestFits = fits; }
+      }
+      if (best && bestFits) addToRoom(p, best, side); else if (best && side > 1) addToRoom(p, best, side); else createRoom(p, map, mode, false, side);
       break;
     }
-    case 'create': leave(p); createRoom(p, pick(m.map, MAPS), pick(m.mode, MODES), true); break;
+    case 'create': leave(p); createRoom(p, pick(m.map, MAPS), pick(m.mode, MODES), true, sideOf(m)); break;
     case 'join': {
       const r = rooms.get(clean(m.code, 5).toUpperCase());
       if (!r) { send(p, { t: 'error', err: 'Sala nao encontrada.' }); break; }
       if (r.players.length >= MAX_PLAYERS) { send(p, { t: 'error', err: 'Sala cheia.' }); break; }
-      leave(p); addToRoom(p, r);
+      leave(p); addToRoom(p, r, sideOf(m));
       break;
     }
     case 'leave': leave(p); send(p, summary()); break;
