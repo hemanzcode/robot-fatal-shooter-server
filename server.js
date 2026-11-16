@@ -12,7 +12,8 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
 const DOWNLOAD_URL = process.env.DOWNLOAD_URL || '';
 const ALLOW_GUESTS = process.env.ALLOW_GUESTS === '1';   // so para testes locais
 const MAX_PLAYERS = 10, TEAM_SIZE = 5;
-const AWAY_MS = +(process.env.AWAY_MS || 60000);   // quem cai (ou sai do app) segura a vaga por 60 s e volta para a mesma sala
+const AWAY_MS = +(process.env.AWAY_MS || 60000);
+const HOST_SWAP_MS = +(process.env.HOST_SWAP_MS || 6000);   // quem cai (ou sai do app) segura a vaga por 60 s e volta para a mesma sala
 const MAPS = ['VILA ARIDA'];
 const MODES = ['MATA-MATA', 'BOMBA'];
 
@@ -87,11 +88,16 @@ function leave(p) {
   if (!r) return;
   p.room = null;
   r.players = r.players.filter(q => q !== p);
-  if (r.players.length === 0 || r.host === p.id) {
-    // Sem o host nao ha quem simule a partida: a sala fecha.
-    r.players.forEach(q => { q.room = null; send(q, { t: 'closed', err: 'O dono da sala saiu.' }); });
-    rooms.delete(r.code);
-  } else broadcastRoom(r);
+  if (r.players.length === 0) { rooms.delete(r.code); return; }
+  // O dono saiu: outro jogador assume a partida (a sala nao morre).
+  if (r.host === p.id) r.host = pickHost(r);
+  broadcastRoom(r);
+}
+
+// Novo dono: o primeiro jogador conectado (se todos estiverem fora, o primeiro da lista).
+function pickHost(r) {
+  const on = r.players.find(q => !q.away);
+  return (on || r.players[0]).id;
 }
 
 async function verify(token) {
@@ -241,6 +247,11 @@ wss.on('connection', ws => {
 // o proxy do Render nem sempre repassa o fechamento, entao o servidor pergunta "ainda esta ai?" a cada 5 s.
 setInterval(() => {
   const now = Date.now();
+  // Dono fora ha mais de 6 s e ha outro jogador conectado: troca o dono.
+  for (const r of rooms.values()) {
+    const h = r.players.find(q => q.id === r.host);
+    if (h && h.away && now - h.awayAt > HOST_SWAP_MS && r.players.some(q => !q.away)) { r.host = pickHost(r); broadcastRoom(r); }
+  }
   for (const p of peers.values()) {
     if (p.away) { if (now - p.awayAt > AWAY_MS) { leave(p); peers.delete(p.id); } continue; }
     if (!p.alive) { const w = p.ws; drop(p); try { w.terminate(); } catch (e) {} continue; }
