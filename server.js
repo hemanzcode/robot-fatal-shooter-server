@@ -12,6 +12,7 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
 const DOWNLOAD_URL = process.env.DOWNLOAD_URL || '';
 const ALLOW_GUESTS = process.env.ALLOW_GUESTS === '1';   // so para testes locais
 const MAX_PLAYERS = 10, TEAM_SIZE = 5;
+const AWAY_MS = +(process.env.AWAY_MS || 60000);   // quem cai (ou sai do app) segura a vaga por 60 s e volta para a mesma sala
 const MAPS = ['VILA ARIDA'];
 const MODES = ['MATA-MATA', 'BOMBA'];
 
@@ -19,7 +20,16 @@ let nextId = 1;
 const peers = new Map();   // id -> peer
 const rooms = new Map();   // code -> room
 
-function send(p, o) { if (p.ws.readyState === 1) p.ws.send(JSON.stringify(o)); }
+function send(p, o) { if (p.ws && p.ws.readyState === 1) p.ws.send(JSON.stringify(o)); }
+
+// Conexao caiu: se estava numa sala, vira "ausente" e guarda a vaga; senao sai de vez.
+function drop(p) {
+  if (!peers.has(p.id) || p.away) return;
+  if (p.room && p.authed && !p.kicked) {
+    p.away = true; p.awayAt = Date.now(); p.ws = null;
+    broadcastRoom(p.room);
+  } else { leave(p); peers.delete(p.id); }
+}
 
 function code() {
   const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -32,7 +42,7 @@ function code() {
 
 function roomInfo(r) {
   return { t: 'room', code: r.code, map: r.map, mode: r.mode, priv: r.priv, bots: r.bots, host: r.host,
-    players: r.players.map(p => ({ id: p.id, name: p.name, team: p.team, agent: p.agent })) };
+    players: r.players.map(p => ({ id: p.id, name: p.name, team: p.team, agent: p.agent, away: !!p.away })) };
 }
 function broadcastRoom(r) { const m = roomInfo(r); r.players.forEach(p => send(p, m)); }
 
@@ -98,18 +108,36 @@ const clean = (s, n) => String(s || '').replace(/[^\w \-\.]/g, '').trim().slice(
 const pick = (v, list) => list.includes(v) ? v : list[0];
 const sideOf = m => (m.side === 0 || m.side === 1) ? m.side : 2;
 
-async function onMessage(p, m) {
+async function onMessage(c, m) {
+  const p = c.p;
   if (m.t === 'hello') {
     let who = null;
     try { who = m.token ? await verify(m.token) : null; } catch (e) { who = null; }
-    if (!who && ALLOW_GUESTS) who = { uid: 'guest' + p.id, name: clean(m.name, 16) || 'Convidado' + p.id };
+    if (!who && ALLOW_GUESTS) who = { uid: 'guest:' + (clean(m.name, 16) || p.id), name: clean(m.name, 16) || 'Convidado' + p.id };
     if (!who) { send(p, { t: 'error', err: 'Login invalido ou expirado. Entre de novo.' }); return; }
+    // Voltando de uma queda: assume o jogador "ausente" (mesma conta e mesma ficha) e continua na sala.
+    if (m.resume) {
+      for (const g of peers.values()) {
+        if (g === p || !g.away || g.resume !== m.resume || g.uid !== who.uid) continue;
+        peers.delete(p.id);
+        g.ws = p.ws; g.alive = true; g.away = false; c.p = g;
+        send(g, { t: 'welcome', id: g.id, name: g.name, resume: g.resume, resumed: true });
+        if (g.room) broadcastRoom(g.room);
+        else send(g, { t: 'closed', err: 'A sala fechou enquanto voce estava fora.' });
+        return;
+      }
+    }
     // Uma conexao por conta: a mais nova derruba a antiga.
-    for (const q of peers.values()) if (q !== p && q.uid === who.uid) { send(q, { t: 'error', err: 'Sua conta entrou em outro lugar.' }); q.ws.close(); }
+    for (const q of peers.values()) {
+      if (q === p || q.uid !== who.uid) continue;
+      if (q.away) { leave(q); peers.delete(q.id); continue; }
+      q.kicked = true; send(q, { t: 'error', err: 'Sua conta entrou em outro lugar.' }); q.ws.close();
+    }
     p.uid = who.uid; p.name = clean(who.name, 16).toUpperCase() || 'JOGADOR';
     p.agent = Math.max(0, Math.min(11, m.agent | 0));
     p.authed = true;
-    send(p, { t: 'welcome', id: p.id, name: p.name });
+    p.resume = require('crypto').randomBytes(12).toString('hex');
+    send(p, { t: 'welcome', id: p.id, name: p.name, resume: p.resume, resumed: false });
     send(p, summary());
     return;
   }
@@ -153,7 +181,7 @@ async function onMessage(p, m) {
       const to = m.to | 0;
       for (const q of r.players) {
         if (q === p) continue;
-        if (to === 0 || (to === -1 && q.id === r.host) || to === q.id) if (q.ws.readyState === 1) q.ws.send(out);
+        if (to === 0 || (to === -1 && q.id === r.host) || to === q.id) if (q.ws && q.ws.readyState === 1) q.ws.send(out);
       }
       break;
     }
@@ -198,21 +226,24 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 128 * 1024 });
 wss.on('connection', ws => {
-  const p = { id: nextId++, ws, name: '', team: 0, agent: 0, room: null, authed: false, alive: true };
-  peers.set(p.id, p);
-  ws.on('pong', () => { p.alive = true; });
+  // c.p pode trocar: ao voltar de uma queda, a conexao nova assume o jogador antigo.
+  const c = { p: { id: nextId++, ws, name: '', team: 0, agent: 0, room: null, authed: false, alive: true } };
+  peers.set(c.p.id, c.p);
+  ws.on('pong', () => { c.p.alive = true; });
   ws.on('message', raw => {
     let m; try { m = JSON.parse(raw.toString()); } catch (e) { return; }
-    if (m && typeof m.t === 'string') onMessage(p, m).catch(e => console.error('msg', e));
+    if (m && typeof m.t === 'string') onMessage(c, m).catch(e => console.error('msg', e));
   });
-  ws.on('close', () => { leave(p); peers.delete(p.id); });
+  ws.on('close', () => { if (c.p.ws === ws) drop(c.p); });
   ws.on('error', () => {});
 });
 // Derruba conexoes mortas (aba fechada, celular sem sinal) em ate ~10 s:
 // o proxy do Render nem sempre repassa o fechamento, entao o servidor pergunta "ainda esta ai?" a cada 5 s.
 setInterval(() => {
+  const now = Date.now();
   for (const p of peers.values()) {
-    if (!p.alive) { p.ws.terminate(); leave(p); peers.delete(p.id); continue; }
+    if (p.away) { if (now - p.awayAt > AWAY_MS) { leave(p); peers.delete(p.id); } continue; }
+    if (!p.alive) { const w = p.ws; drop(p); try { w.terminate(); } catch (e) {} continue; }
     p.alive = false; try { p.ws.ping(); } catch (e) {}
   }
 }, 5000);
