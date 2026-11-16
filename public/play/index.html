@@ -45,6 +45,20 @@
     showBanner: function (msg, type) { if (type === 'error') console.error(msg); }
   };
   canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  // PC: CTRL e so para agachar. Bloqueia os atalhos do navegador (CTRL+S, D, F, A, roda = zoom...) enquanto joga;
+  // em tela cheia o "keyboard lock" segura ate CTRL+W/T/N (que o navegador nao deixa bloquear fora dela).
+  if (!mobile) {
+    window.addEventListener('keydown', function (e) { if (e.ctrlKey || e.key === 'Control') e.preventDefault(); }, true);
+    window.addEventListener('wheel', function (e) { if (e.ctrlKey) e.preventDefault(); }, { passive: false, capture: true });
+    var lockKeys = function () { if (navigator.keyboard && navigator.keyboard.lock) navigator.keyboard.lock().catch(function () {}); };
+    document.addEventListener('fullscreenchange', function () { if (document.fullscreenElement) lockKeys(); });
+    canvas.addEventListener('mousedown', function () {
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen)
+        document.documentElement.requestFullscreen().then(lockKeys).catch(function () {});
+    });
+    // Se mesmo assim o navegador tentar fechar a aba (CTRL+W fora da tela cheia), pergunta antes.
+    window.addEventListener('beforeunload', function (e) { if (window.rfsQuit) return; e.preventDefault(); e.returnValue = ''; });
+  }
   document.addEventListener('touchmove', function (e) { e.preventDefault(); }, { passive: false });
   // Primeiro toque: tela cheia e trava deitado (some a barra do navegador no Android).
   if (mobile) {
