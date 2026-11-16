@@ -33,9 +33,9 @@
   if (mobile) document.body.classList.add('mobile');
   var canvas = document.getElementById('c');
   var config = {
-    dataUrl: "Build/play.data.unityweb?v=cddd1520",
-    frameworkUrl: "Build/play.framework.js.unityweb?v=cddd1520",
-    codeUrl: "Build/play.wasm.unityweb?v=cddd1520",
+    dataUrl: "Build/play.data.unityweb?v=bb38f099",
+    frameworkUrl: "Build/play.framework.js.unityweb?v=bb38f099",
+    codeUrl: "Build/play.wasm.unityweb?v=bb38f099",
     streamingAssetsUrl: "StreamingAssets",
     companyName: "DefaultCompany",
     productName: "Robot Fatal Shooter",
@@ -61,7 +61,7 @@
     document.addEventListener('touchend', goFull, { passive: true });
   }
   var s = document.createElement('script');
-  s.src = "Build/play.loader.js?v=cddd1520";
+  s.src = "Build/play.loader.js?v=bb38f099";
   s.onload = function () {
     createUnityInstance(canvas, config, function (p) {
       document.getElementById('fill').style.width = (100 * p) + '%';
