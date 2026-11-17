@@ -195,6 +195,32 @@ async function onMessage(c, m) {
 }
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.json': 'application/json' };
+// Video do menu (feito no Higgsfield): o servidor busca uma vez e guarda na memoria; o navegador guarda em cache.
+const PROMO_URL = process.env.PROMO_URL || 'https://d2ol7oe51mr4n9.cloudfront.net/user_3LzTm4Qk1kcTVaub1FgPtg30zAP/170f7c08-41c9-4df9-837a-c246c671c166.mp4';
+let promoBuf = null, promoLoading = null;
+function loadPromo() {
+  if (promoBuf) return Promise.resolve(promoBuf);
+  if (!promoLoading) promoLoading = fetch(PROMO_URL).then(r => { if (!r.ok) throw new Error('promo ' + r.status); return r.arrayBuffer(); })
+    .then(b => (promoBuf = Buffer.from(b))).finally(() => { promoLoading = null; });
+  return promoLoading;
+}
+function servePromo(req, res) {
+  loadPromo().then(buf => {
+    const total = buf.length;
+    const h = { 'content-type': 'video/mp4', 'accept-ranges': 'bytes', 'cache-control': 'public, max-age=604800', 'access-control-allow-origin': '*' };
+    const m = /bytes=(\d*)-(\d*)/.exec(req.headers.range || '');
+    if (m) {
+      let start = m[1] ? +m[1] : total - +m[2], end = m[1] && m[2] ? +m[2] : total - 1;
+      if (!m[1]) end = total - 1;
+      if (start >= total || start < 0 || end < start) { res.writeHead(416, { 'content-range': 'bytes */' + total }); res.end(); return; }
+      end = Math.min(end, total - 1);
+      h['content-range'] = 'bytes ' + start + '-' + end + '/' + total; h['content-length'] = end - start + 1;
+      res.writeHead(206, h); res.end(buf.subarray(start, end + 1)); return;
+    }
+    h['content-length'] = total; res.writeHead(200, h); res.end(buf);
+  }).catch(() => { res.writeHead(502); res.end('video indisponivel'); });
+}
+
 const server = http.createServer((req, res) => {
   const url = req.url.split('?')[0];
   if (url === '/health') { res.writeHead(200); res.end('ok'); return; }
@@ -207,6 +233,7 @@ const server = http.createServer((req, res) => {
     if (!DOWNLOAD_URL) { res.writeHead(503, { 'content-type': 'text/plain; charset=utf-8' }); res.end('Download ainda nao publicado.'); return; }
     res.writeHead(302, { location: DOWNLOAD_URL }); res.end(); return;
   }
+  if (url === '/promo/menu.mp4') { servePromo(req, res); return; }
   const file = path.join(__dirname, 'public', url === '/' ? 'index.html' : path.normalize(url).replace(/^([\\/]|\.\.)+/, ''));
   // sem cache "as cegas": o navegador sempre confere se o arquivo mudou (evita misturar build velho com novo)
   let target = file;
