@@ -221,6 +221,28 @@ function servePromo(req, res) {
   }).catch(() => { res.writeHead(502); res.end('video indisponivel'); });
 }
 
+// Servidores ICE da voz do time. STUN do Google sempre; TURN (para redes que bloqueiam conexao direta) se configurado:
+// Cloudflare (CF_TURN_KEY_ID + CF_TURN_TOKEN, credenciais de 24 h) ou um TURN fixo (TURN_URL, TURN_USER, TURN_PASS).
+let iceCache = null, iceAt = 0;
+async function iceServers() {
+  const base = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
+  if (process.env.CF_TURN_KEY_ID && process.env.CF_TURN_TOKEN) {
+    if (iceCache && Date.now() - iceAt < 3600e3) return iceCache;
+    try {
+      const r = await fetch('https://rtc.live.cloudflare.com/v1/turn/keys/' + process.env.CF_TURN_KEY_ID + '/credentials/generate-ice-servers', {
+        method: 'POST', headers: { authorization: 'Bearer ' + process.env.CF_TURN_TOKEN, 'content-type': 'application/json' }, body: JSON.stringify({ ttl: 86400 })
+      });
+      const j = await r.json();
+      if (j && j.iceServers) { iceCache = base.concat(j.iceServers); iceAt = Date.now(); return iceCache; }
+    } catch (e) {}
+  }
+  if (process.env.TURN_URL) base.push({ urls: process.env.TURN_URL.split(','), username: process.env.TURN_USER || '', credential: process.env.TURN_PASS || '' });
+  return base;
+}
+function serveIce(res) {
+  iceServers().then(list => { res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify({ iceServers: list })); });
+}
+
 const server = http.createServer((req, res) => {
   const url = req.url.split('?')[0];
   if (url === '/health') { res.writeHead(200); res.end('ok'); return; }
@@ -234,6 +256,7 @@ const server = http.createServer((req, res) => {
     res.writeHead(302, { location: DOWNLOAD_URL }); res.end(); return;
   }
   if (url === '/promo/menu.mp4') { servePromo(req, res); return; }
+  if (url === '/voice/ice') { serveIce(res); return; }
   const file = path.join(__dirname, 'public', url === '/' ? 'index.html' : path.normalize(url).replace(/^([\\/]|\.\.)+/, ''));
   // sem cache "as cegas": o navegador sempre confere se o arquivo mudou (evita misturar build velho com novo)
   let target = file;
