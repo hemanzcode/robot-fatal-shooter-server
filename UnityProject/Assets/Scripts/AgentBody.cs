@@ -119,6 +119,21 @@ public class AgentBody : MonoBehaviour
         if (anim == null) anim = model.AddComponent<Animator>();
         anim.applyRootMotion = false;
         anim.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+        if (useNewModel)
+        {
+            Avatar avatar = BuildHumanoidAvatar(model.transform);
+            if (avatar != null && avatar.isHuman)
+            {
+                anim.avatar = avatar;
+                directBoneLookup = false;
+            }
+            else
+            {
+                if (avatar != null) Destroy(avatar);
+                directBoneLookup = true;
+                Debug.LogWarning("Avatar humanoide invalido para agente GLB: " + d.file);
+            }
+        }
 
         spine = Bone(HumanBodyBones.Spine, "Spine"); spine1 = Bone(HumanBodyBones.Chest, "Spine1"); spine2 = Bone(HumanBodyBones.UpperChest, "Spine2");
         hips = Bone(HumanBodyBones.Hips, "Hips");
@@ -131,30 +146,27 @@ public class AgentBody : MonoBehaviour
         midL = Bone(HumanBodyBones.LeftMiddleProximal, "LeftHandMiddle1"); idxL = Bone(HumanBodyBones.LeftIndexProximal, "LeftHandIndex1"); pinL = Bone(HumanBodyBones.LeftLittleProximal, "LeftHandPinky1");
         midR = Bone(HumanBodyBones.RightMiddleProximal, "RightHandMiddle1"); idxR = Bone(HumanBodyBones.RightIndexProximal, "RightHandIndex1"); pinR = Bone(HumanBodyBones.RightLittleProximal, "RightHandPinky1");
 
-        if (useNewModel)
+        LoadClips();
+        if (clips[0] != null && clips[1] != null && clips[2] != null && anim.avatar != null && anim.avatar.isHuman)
         {
-            SetupProceduralRig();
+            graph = PlayableGraph.Create("agent-locomotion-" + d.file);
+            graph.SetTimeUpdateMode(DirectorUpdateMode.GameTime);
+            mixer = AnimationMixerPlayable.Create(graph, 3);
+            for (int i = 0; i < 3; i++)
+            {
+                plays[i] = AnimationClipPlayable.Create(graph, clips[i]);
+                plays[i].SetTime(Random.value * clips[i].length);
+                graph.Connect(plays[i], 0, mixer, i);
+                mixer.SetInputWeight(i, i == 0 ? 1f : 0f);
+            }
+            AnimationPlayableOutput o = AnimationPlayableOutput.Create(graph, "out", anim);
+            o.SetSourcePlayable(mixer);
+            graph.Play();
         }
         else
         {
-            LoadClips();
-            if (clips[0] != null && clips[1] != null && clips[2] != null && anim.avatar != null && anim.avatar.isHuman)
-            {
-                graph = PlayableGraph.Create("legacy-agent");
-                graph.SetTimeUpdateMode(DirectorUpdateMode.GameTime);
-                mixer = AnimationMixerPlayable.Create(graph, 3);
-                for (int i = 0; i < 3; i++)
-                {
-                    plays[i] = AnimationClipPlayable.Create(graph, clips[i]);
-                    plays[i].SetTime(Random.value * clips[i].length);
-                    graph.Connect(plays[i], 0, mixer, i);
-                    mixer.SetInputWeight(i, i == 0 ? 1f : 0f);
-                }
-                AnimationPlayableOutput o = AnimationPlayableOutput.Create(graph, "out", anim);
-                o.SetSourcePlayable(mixer);
-                graph.Play();
-            }
-            else Debug.LogWarning("Agente sem animacao humanoide: " + d.file + " avatar=" + (anim.avatar != null ? anim.avatar.isHuman.ToString() : "null"));
+            Debug.LogWarning("Agente sem animacao humanoide: " + d.file + " avatar=" + (anim.avatar != null ? anim.avatar.isHuman.ToString() : "null"));
+            if (useNewModel) SetupProceduralRig();
         }
 
         BuildGun();
@@ -167,6 +179,42 @@ public class AgentBody : MonoBehaviour
         ok = armL != null && armR != null && handL != null && handR != null && foreL != null && foreR != null;
     }
 
+    // Converte o esqueleto padrao dos GLBs para o mesmo mapeamento humanoide dos FBXs.
+    static Avatar BuildHumanoidAvatar(Transform root)
+    {
+        Dictionary<string, Transform> bones = new Dictionary<string, Transform>();
+        foreach (Transform t in root.GetComponentsInChildren<Transform>(true)) bones[t.name] = t;
+        string[,] mapping = {
+            {"Hips", "Hips"},
+            {"LeftUpLeg", "LeftUpperLeg"}, {"RightUpLeg", "RightUpperLeg"},
+            {"LeftLeg", "LeftLowerLeg"}, {"RightLeg", "RightLowerLeg"},
+            {"LeftFoot", "LeftFoot"}, {"RightFoot", "RightFoot"},
+            {"Spine02", "Spine"}, {"Spine01", "Chest"}, {"Spine", "UpperChest"},
+            {"neck", "Neck"}, {"Head", "Head"},
+            {"LeftShoulder", "LeftShoulder"}, {"RightShoulder", "RightShoulder"},
+            {"LeftArm", "LeftUpperArm"}, {"RightArm", "RightUpperArm"},
+            {"LeftForeArm", "LeftLowerArm"}, {"RightForeArm", "RightLowerArm"},
+            {"LeftHand", "LeftHand"}, {"RightHand", "RightHand"}
+        };
+        List<HumanBone> human = new List<HumanBone>();
+        for (int i = 0; i < mapping.GetLength(0); i++)
+        {
+            Transform bone;
+            if (!bones.TryGetValue(mapping[i, 0], out bone)) continue;
+            human.Add(new HumanBone { boneName = bone.name, humanName = mapping[i, 1], limit = new HumanLimit { useDefaultValues = true } });
+        }
+        List<SkeletonBone> skeleton = new List<SkeletonBone>();
+        foreach (Transform t in root.GetComponentsInChildren<Transform>(true))
+            skeleton.Add(new SkeletonBone { name = t.name, position = t.localPosition, rotation = t.localRotation, scale = t.localScale });
+        Avatar avatar = AvatarBuilder.BuildHumanAvatar(root.gameObject, new HumanDescription
+        {
+            human = human.ToArray(), skeleton = skeleton.ToArray(),
+            armStretch = 0.05f, legStretch = 0.05f, upperArmTwist = 0.5f, lowerArmTwist = 0.5f,
+            upperLegTwist = 0.5f, lowerLegTwist = 0.5f, feetSpacing = 0f, hasTranslationDoF = false
+        });
+        avatar.name = root.name + "-Humanoid";
+        return avatar;
+    }
     // Os GLBs novos compartilham o mesmo rig. Desativamos qualquer clip embutido
     // e animamos os ossos sobre a pose de bind, sem misturar o retarget dos FBXs antigos.
     void SetupProceduralRig()
@@ -435,5 +483,6 @@ public class AgentBody : MonoBehaviour
     void OnDestroy()
     {
         if (graph.IsValid()) graph.Destroy();
+        if (anim != null && anim.avatar != null && anim.avatar.name.EndsWith("-Humanoid")) Destroy(anim.avatar);
     }
 }
