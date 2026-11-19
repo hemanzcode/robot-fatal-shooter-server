@@ -4,37 +4,53 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png">
-<link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/fatal-shooter-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/icons/fatal-shooter-180.png">
+<meta name="theme-color" content="#08060f">
 <meta name="apple-mobile-web-app-title" content="Fatal Shooter">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
 <title>Robot Fatal Shooter</title>
 <style>
-  :root { --bg:#0d0b08; --panel:#17130d; --sand:#d9b36c; --ink:#f3ead9; --dim:#a39781; --ball:#2f7bff; --moloch:#ff3324; --go:#ffd91a; }
+  :root { --bg:#08060f; --panel:#15101d; --sand:#bd55ff; --ink:#f5f0ff; --dim:#b2a4c3; --ball:#9a20ff; --moloch:#6510c9; --go:#d8b8ff; }
   * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.55 "Segoe UI", system-ui, sans-serif; }
-  main { max-width: 860px; margin: 0 auto; padding: 56px 24px 80px; }
+  body { margin:0; background:radial-gradient(ellipse at 15% 0%, #26103c 0, var(--bg) 52%); color:var(--ink); font:16px/1.55 "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 960px; margin: 0 auto; padding: 42px 24px 80px; }
+  .brand { display:flex; align-items:center; gap:24px; margin:0 0 20px; }
+  .brand img { display:block; width:clamp(104px, 20vw, 180px); height:auto; border-radius:24px; box-shadow:0 18px 60px #8100ff33; }
+  .brand-copy { min-width:0; }
   h1 { font-size: clamp(34px, 7vw, 64px); line-height:1; letter-spacing: .02em; margin: 0 0 6px; text-wrap: balance; }
-  .bar { height:6px; width:220px; background: linear-gradient(90deg, var(--ball) 50%, var(--moloch) 50%); margin: 18px 0; }
+  .bar { height:6px; width:220px; background: linear-gradient(90deg, #f5f0ff, var(--ball)); margin: 18px 0; }
   .tag { color: var(--dim); letter-spacing:.12em; text-transform: uppercase; font-size: 14px; }
-  .cta { display:inline-block; margin: 28px 0 8px; padding: 16px 30px; background: var(--go); color:#111; font-weight:800; text-decoration:none; letter-spacing:.04em; border-left: 8px solid #fff; }
-  .cta[aria-disabled=true] { background:#4a4334; color:#b9ad95; pointer-events:none; }
+  .cta { display:inline-block; margin: 20px 10px 8px 0; padding: 14px 24px; background: var(--go); color:#170a22; font-weight:800; text-decoration:none; letter-spacing:.04em; border:0; border-left: 6px solid #fff; cursor:pointer; font:inherit; font-weight:800; }
+  .cta[aria-disabled=true] { background:#3a3146; color:#aaa0b4; pointer-events:none; }
   .cta:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+  .install-cta { background:#251233; border-left-color:#bb59ff; color:#f7ebff; }
+  .install-hint { max-width:620px; color:var(--dim); font-size:14px; }
   .status { color: var(--dim); font-size: 14px; }
-  section { background: var(--panel); border-left: 4px solid var(--sand); padding: 18px 22px; margin-top: 28px; }
+  section { background: var(--panel); border:1px solid #ffffff14; border-left: 4px solid var(--sand); padding: 18px 22px; margin-top: 28px; border-radius:0 12px 12px 0; }
   h2 { margin: 0 0 8px; font-size: 18px; letter-spacing:.08em; text-transform: uppercase; color: var(--sand); }
   ol, ul { margin: 0; padding-left: 20px; }
   li { margin: 4px 0; }
-  b.ball { color: var(--ball); } b.moloch { color: var(--moloch); }
+  b.ball { color: #a96aff; } b.moloch { color: #e0c5ff; }
+  [hidden] { display:none !important; }
+  @media (max-width: 560px) { main { padding:28px 18px 56px; } .brand { gap:16px; } .brand img { width:104px; border-radius:18px; } h1 { font-size:clamp(30px, 8vw, 44px); } .tag { font-size:11px; } .cta { display:block; width:100%; text-align:center; margin:16px 0 8px; } }
 </style>
 </head>
 <body>
 <main>
-  <div class="tag">FPS tático 5 x 5 &nbsp;//&nbsp; navegador, celular e Windows</div>
-  <h1>ROBOT FATAL SHOOTER</h1>
-  <div class="bar"></div>
+  <header class="brand">
+    <img src="/icons/logo-fatal-shooter.jpeg" alt="Logo Fatal Shooter" width="180" height="180">
+    <div class="brand-copy">
+      <div class="tag">FPS tático 5 x 5 &nbsp;//&nbsp; navegador, celular e Windows</div>
+      <h1>ROBOT FATAL SHOOTER</h1>
+      <div class="bar"></div>
+    </div>
+  </header>
   <p><b class="ball">BALL</b> contra <b class="moloch">MOLOCH</b> em uma vila no deserto. Plante ou desarme a bomba, abra a caixa laranja e solte um dinossauro no time adversário.</p>
   <a class="cta" href="/play/index.html">JOGAR NO NAVEGADOR (PC E CELULAR)</a><br>
+  <button class="cta install-cta" id="install-app" data-pwa-install hidden type="button">INSTALAR JOGO</button>
+  <p class="install-hint" id="install-hint" data-pwa-install-hint aria-live="polite"></p>
   <a class="cta" id="dl" href="/download" aria-disabled="true">BAIXAR PARA WINDOWS</a>
   <div class="status" id="st">Consultando o servidor…</div>
 
@@ -59,5 +75,7 @@ fetch('/status').then(r => r.json()).then(s => {
   st.textContent = (s.download ? '' : 'Download ainda não publicado. ') + s.online + ' jogador(es) online agora, ' + s.rooms + ' sala(s) aberta(s).';
 }).catch(() => { document.getElementById('st').textContent = 'Servidor acordando, recarregue em instantes.'; });
 </script>
+<script src="/pwa-install.js" defer></script>
 </body>
 </html>
+

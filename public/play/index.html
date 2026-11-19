@@ -5,29 +5,34 @@
 <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#0d0b08">
+<meta name="theme-color" content="#08060f">
 <link rel="manifest" href="/manifest.webmanifest">
-<link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32.png">
-<link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/fatal-shooter-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/icons/fatal-shooter-180.png">
 <meta name="apple-mobile-web-app-title" content="Fatal Shooter">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Robot Fatal Shooter</title>
 <style>
-  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #0d0b08; overflow: hidden; overscroll-behavior: none; }
-  #c { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; display: block; touch-action: none; outline: none; background: #0d0b08; }
-  #load { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; color: #f3ead9; font: 600 15px/1.4 "Segoe UI", system-ui, sans-serif; letter-spacing: .12em; text-transform: uppercase; }
-  #load h1 { margin: 0; font-size: clamp(22px, 5vw, 40px); letter-spacing: .04em; }
-  #bar { width: min(70vw, 420px); height: 6px; background: #2b241a; }
-  #fill { width: 0; height: 100%; background: linear-gradient(90deg, #2f7bff, #ff3324); transition: width .2s; }
-  #pct { color: #a39781; font-size: 13px; }
-  #rot { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; text-align: center; padding: 24px; background: #0d0b08ee; color: #ffd91a; font: 700 18px/1.4 "Segoe UI", system-ui, sans-serif; z-index: 10; }
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #08060f; overflow: hidden; overscroll-behavior: none; }
+  #c { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; display: block; touch-action: none; outline: none; background: #08060f; }
+  #load { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: #f5f0ff; font: 600 15px/1.4 "Segoe UI", system-ui, sans-serif; letter-spacing: .12em; text-transform: uppercase; background:radial-gradient(ellipse at 50% 35%, #221034, #08060f 70%); }
+  #game-logo { display:block; width:clamp(112px, 24vw, 196px); height:auto; border-radius:24px; box-shadow:0 20px 64px #8500ff35; }
+  #load h1 { margin: 0; font-size: clamp(14px, 3vw, 20px); letter-spacing: .16em; }
+  #bar { width: min(70vw, 420px); height: 6px; background: #2a2034; border-radius:6px; overflow:hidden; }
+  #fill { width: 0; height: 100%; background: linear-gradient(90deg, #f5f0ff, #8f15ff); transition: width .2s; }
+  #pct { color: #b2a4c3; font-size: 13px; }
+  .pwa-install { padding:10px 16px; border:1px solid #9b3de0; border-radius:999px; background:#21112d; color:#f7ebff; font:700 13px/1.2 "Segoe UI",system-ui,sans-serif; letter-spacing:.04em; cursor:pointer; }
+  .pwa-install-hint { max-width:min(90vw,420px); margin:0; color:#c8bbd6; font:500 12px/1.4 "Segoe UI",system-ui,sans-serif; letter-spacing:0; text-align:center; text-transform:none; }
+  [hidden] { display:none !important; }
+  #rot { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; text-align: center; padding: 24px; background: #08060fee; color: #d8b8ff; font: 700 18px/1.4 "Segoe UI", system-ui, sans-serif; z-index: 10; }
   @media (orientation: portrait) { body.mobile #rot { display: flex; } }
 </style>
 </head>
 <body>
 <canvas id="c" tabindex="-1"></canvas>
-<div id="load"><h1>ROBOT FATAL SHOOTER</h1><div id="bar"><div id="fill"></div></div><div id="pct">carregando 0%</div></div>
+<div id="load"><img id="game-logo" src="/icons/logo-fatal-shooter.jpeg" alt="Logo Fatal Shooter" width="196" height="196"><h1>CARREGANDO JOGO</h1><div id="bar"><div id="fill"></div></div><div id="pct">carregando 0%</div><button id="install-app" class="pwa-install" data-pwa-install hidden type="button">INSTALAR JOGO</button><p id="install-hint" class="pwa-install-hint" data-pwa-install-hint aria-live="polite"></p></div>
 <div id="rot">Gire o celular para jogar deitado</div>
+<script src="/pwa-install.js" defer></script>
 <script>
   var mobile = /iPhone|iPad|iPod|Android|Mobile/i.test(navigator.userAgent);
   if (mobile) document.body.classList.add('mobile');
@@ -90,4 +95,5 @@
 </script>
 </body>
 </html>
+
 

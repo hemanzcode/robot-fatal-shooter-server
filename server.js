@@ -194,7 +194,7 @@ async function onMessage(c, m) {
   }
 }
 
-const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.json': 'application/json' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.json': 'application/json' };
 // Video do menu (feito no Higgsfield): o servidor busca uma vez e guarda na memoria; o navegador guarda em cache.
 const PROMO_URL = process.env.PROMO_URL || 'https://d2ol7oe51mr4n9.cloudfront.net/user_3LzTm4Qk1kcTVaub1FgPtg30zAP/170f7c08-41c9-4df9-837a-c246c671c166.mp4';
 let promoBuf = null, promoLoading = null;
@@ -344,3 +344,4 @@ setInterval(() => {
 }, 5000);
 
 server.listen(PORT, () => console.log('Robot Fatal Shooter server na porta ' + PORT + (SUPABASE_URL ? '' : ' (sem Supabase configurado)')));
+
