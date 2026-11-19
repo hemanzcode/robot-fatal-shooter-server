@@ -257,6 +257,33 @@ const server = http.createServer((req, res) => {
   }
   if (url === '/promo/menu.mp4') { servePromo(req, res); return; }
   if (url === '/voice/ice') { serveIce(res); return; }
+  // GitHub blocks files over 100 MB. Store Unity's data in ordered parts, then
+  // stream them as the single file path expected by the WebGL loader.
+  if (url === '/play/Build/play.data.unityweb') {
+    const dir = path.join(__dirname, 'public', 'play', 'Build');
+    fs.readdir(dir, (readErr, names) => {
+      const parts = readErr ? [] : names.filter(n => /^play\.data\.unityweb\.part\d+$/.test(n)).sort();
+      if (!parts.length) { res.writeHead(404); res.end('build WebGL indisponivel'); return; }
+      Promise.all(parts.map(name => fs.promises.stat(path.join(dir, name)))).then(stats => {
+        const size = stats.reduce((total, stat) => total + stat.size, 0);
+        const tag = '"webgl-' + stats.map(stat => stat.size.toString(16) + '-' + Math.floor(stat.mtimeMs).toString(16)).join('-') + '"';
+        const headers = { 'content-type': 'application/octet-stream', 'cache-control': 'no-cache', etag: tag, 'content-length': size };
+        if (req.headers['if-none-match'] === tag) { res.writeHead(304, headers); res.end(); return; }
+        res.writeHead(200, headers);
+        if (req.method === 'HEAD') { res.end(); return; }
+        let i = 0;
+        const sendPart = () => {
+          if (i >= parts.length) { res.end(); return; }
+          const stream = fs.createReadStream(path.join(dir, parts[i++]));
+          stream.on('error', err => { console.error('WebGL data stream', err); res.destroy(err); });
+          stream.on('end', sendPart);
+          stream.pipe(res, { end: false });
+        };
+        sendPart();
+      }).catch(err => { console.error('WebGL data parts', err); if (!res.headersSent) res.writeHead(500); res.end(); });
+    });
+    return;
+  }
   const file = path.join(__dirname, 'public', url === '/' ? 'index.html' : path.normalize(url).replace(/^([\\/]|\.\.)+/, ''));
   // sem cache "as cegas": o navegador sempre confere se o arquivo mudou (evita misturar build velho com novo)
   let target = file;
