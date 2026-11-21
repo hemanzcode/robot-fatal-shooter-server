@@ -266,7 +266,7 @@ const server = http.createServer((req, res) => {
       const v2Dir = path.join(dir, 'data-v2');
       fs.readdir(v2Dir, (v2Err, v2Names) => {
         const v2Parts = v2Err ? [] : v2Names.filter(n => /^play\.data\.unityweb\.part\d+$/.test(n)).sort();
-        const useV2 = v2Parts.length === 9 && v2Parts.every((name, i) => name === `play.data.unityweb.part${String(i).padStart(2, '0')}`);
+        const useV2 = v2Parts.length > 0 && v2Parts.every((name, i) => name === `play.data.unityweb.part${String(i).padStart(2, '0')}`);
         const parts = useV2 ? v2Parts : legacyParts;
         const partsDir = useV2 ? v2Dir : dir;
         if (!parts.length) { res.writeHead(404); res.end('build WebGL indisponivel'); return; }
