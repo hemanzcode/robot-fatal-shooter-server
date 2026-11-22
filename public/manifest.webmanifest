@@ -1,8 +1,8 @@
 {
-  "name": "Robot Fatal Shooter",
+  "name": "Fatal Shooter",
   "short_name": "Fatal Shooter",
   "id": "/play/",
-  "description": "FPS tático Robot Fatal Shooter",
+  "description": "FPS tático Fatal Shooter",
   "start_url": "/play/",
   "scope": "/",
   "display": "fullscreen",

@@ -1,4 +1,4 @@
-// Robot Fatal Shooter - servidor de lobby, salas e relay.
+// Fatal Shooter - servidor de lobby, salas e relay.
 // O jogo e "host-autoritativo": o primeiro jogador da sala simula bots, dano e placar;
 // este servidor so autentica, monta as salas (ate 10 jogadores, 5 x 5) e repassa as mensagens.
 const http = require('http');
@@ -14,7 +14,7 @@ const ALLOW_GUESTS = process.env.ALLOW_GUESTS === '1';   // so para testes locai
 const MAX_PLAYERS = 10, TEAM_SIZE = 5;
 const AWAY_MS = +(process.env.AWAY_MS || 60000);
 const HOST_SWAP_MS = +(process.env.HOST_SWAP_MS || 6000);   // quem cai (ou sai do app) segura a vaga por 60 s e volta para a mesma sala
-const MAPS = ['VILA ARIDA'];
+const MAPS = ['MERCADO', 'NO GELO'];
 const MODES = ['MATA-MATA', 'BOMBA'];
 
 let nextId = 1;
@@ -66,7 +66,7 @@ function summary() {
 }
 
 function teamCount(r) { const c = [0, 0]; r.players.forEach(q => c[q.team]++); return c; }
-// side: 0 BALL, 1 MOLOCH, 2 (ou ausente) automatico. Time cheio cai no outro.
+// side: 0 BAAL, 1 MOLOCH, 2 (ou ausente) automatico. Time cheio cai no outro.
 function addToRoom(p, r, side) {
   const c = teamCount(r);
   if ((side === 0 || side === 1) && c[side] < TEAM_SIZE) p.team = side;
@@ -343,5 +343,5 @@ setInterval(() => {
   }
 }, 5000);
 
-server.listen(PORT, () => console.log('Robot Fatal Shooter server na porta ' + PORT + (SUPABASE_URL ? '' : ' (sem Supabase configurado)')));
+server.listen(PORT, () => console.log('Fatal Shooter server na porta ' + PORT + (SUPABASE_URL ? '' : ' (sem Supabase configurado)')));
 
