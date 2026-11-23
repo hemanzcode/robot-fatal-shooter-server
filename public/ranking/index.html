@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/fatal-shooter-32.png">
+<meta name="theme-color" content="#08060f">
+<title>Ranking · Fatal Shooter</title>
+<style>
+  :root { --bg:#08060f; --panel:#15101d; --sand:#bd55ff; --ink:#f5f0ff; --dim:#b2a4c3; --gold:#e3b24e; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:radial-gradient(ellipse at 15% 0%, #26103c 0, var(--bg) 52%); color:var(--ink); font:16px/1.5 "Segoe UI", system-ui, sans-serif; }
+  main { max-width:960px; margin:0 auto; padding:40px 24px 80px; }
+  a { color:var(--sand); }
+  header { display:flex; align-items:center; gap:18px; }
+  header img { width:72px; height:72px; }
+  h1 { margin:0; font-size:clamp(30px,6vw,52px); letter-spacing:.02em; }
+  .tag { color:var(--dim); letter-spacing:.12em; text-transform:uppercase; font-size:13px; }
+  table { width:100%; border-collapse:collapse; margin-top:26px; background:var(--panel); border:1px solid #ffffff14; }
+  th, td { padding:10px 12px; text-align:left; }
+  th { color:var(--dim); font-size:12px; letter-spacing:.1em; text-transform:uppercase; border-bottom:1px solid #ffffff1f; }
+  td.n { font-variant-numeric:tabular-nums; text-align:right; } th.n { text-align:right; }
+  tr:nth-child(even) td { background:#ffffff06; }
+  .pos { width:56px; font-weight:800; color:var(--dim); }
+  tr.top1 .pos { color:var(--gold); } tr.top2 .pos { color:#cfd6df; } tr.top3 .pos { color:#d08a52; }
+  .pat { display:inline-block; padding:2px 8px; border-radius:4px; font-size:12px; font-weight:700; letter-spacing:.06em; background:#ffffff12; }
+  .p-LENDA { background:#e3b24e; color:#1a1206; } .p-ELITE { background:#a855f7; } .p-SARGENTO { background:#3b8bff; } .p-SOLDADO { background:#3a6b3a; }
+  .empty { color:var(--dim); padding:24px 0; }
+  @media (max-width:640px) { .hide-s { display:none; } th, td { padding:8px; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="/icons/shot-256.png" alt="">
+    <div><div class="tag">Fatal Shooter · partidas online</div><h1>RANKING</h1></div>
+  </header>
+  <p class="tag" style="margin-top:14px">Os 50 jogadores com mais XP. Patentes: Recruta (nível 1), Soldado (5), Sargento (10), Elite (20), Lenda (35).</p>
+  <table>
+    <thead><tr><th>#</th><th>Jogador</th><th>Patente</th><th class="n">Nível</th><th class="n">XP</th><th class="n hide-s">Vitórias</th><th class="n hide-s">Abates</th></tr></thead>
+    <tbody id="rows"><tr><td colspan="7" class="empty">Carregando…</td></tr></tbody>
+  </table>
+  <p><a href="/">← Voltar</a> · <a href="/play/index.html">Jogar</a></p>
+</main>
+<script>
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt = n => Number(n).toLocaleString('pt-BR');
+fetch('/ranking.json').then(r => r.json()).then(list => {
+  const tb = document.getElementById('rows');
+  if (!list.length) { tb.innerHTML = '<tr><td colspan="7" class="empty">Ninguém pontuou ainda. Jogue uma partida online!</td></tr>'; return; }
+  tb.innerHTML = list.map((p, i) => `<tr class="top${i + 1}"><td class="pos">${i + 1}</td><td>${esc(p.nome)}</td><td><span class="pat p-${esc(p.patente)}">${esc(p.patente)}</span></td><td class="n">${p.nivel}</td><td class="n">${fmt(p.xp)}</td><td class="n hide-s">${fmt(p.vitorias)}</td><td class="n hide-s">${fmt(p.abates)}</td></tr>`).join('');
+}).catch(() => { document.getElementById('rows').innerHTML = '<tr><td colspan="7" class="empty">Ranking indisponível no momento.</td></tr>'; });
+</script>
+</body>
+</html>

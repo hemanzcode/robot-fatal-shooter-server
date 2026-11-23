@@ -5,6 +5,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { WebSocketServer } = require('ws');
+const prog = require('./progresso');
 
 const PORT = process.env.PORT || 8080;
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
@@ -14,6 +15,7 @@ const ALLOW_GUESTS = process.env.ALLOW_GUESTS === '1';   // so para testes locai
 const MAX_PLAYERS = 10, TEAM_SIZE = 5;
 const AWAY_MS = +(process.env.AWAY_MS || 60000);
 const HOST_SWAP_MS = +(process.env.HOST_SWAP_MS || 6000);   // quem cai (ou sai do app) segura a vaga por 60 s e volta para a mesma sala
+const PRESENCA_MIN_MS = +(process.env.PRESENCA_MIN_S || 60) * 1000;   // quem entrou no finzinho nao ganha XP
 const MAPS = ['MERCADO', 'NO GELO'];
 const MODES = ['MATA-MATA', 'BOMBA'];
 
@@ -43,7 +45,7 @@ function code() {
 
 function roomInfo(r) {
   return { t: 'room', code: r.code, map: r.map, mode: r.mode, priv: r.priv, bots: r.bots, host: r.host,
-    players: r.players.map(p => ({ id: p.id, name: p.name, team: p.team, agent: p.agent, away: !!p.away })) };
+    players: r.players.map(p => ({ id: p.id, name: p.name, team: p.team, agent: p.agent, away: !!p.away, lvl: p.lvl || 1, equip: p.equip || ['', '', '', '', ''] })) };
 }
 function broadcastRoom(r) { const m = roomInfo(r); r.players.forEach(p => send(p, m)); }
 
@@ -72,12 +74,13 @@ function addToRoom(p, r, side) {
   if ((side === 0 || side === 1) && c[side] < TEAM_SIZE) p.team = side;
   else p.team = c[0] <= c[1] ? 0 : 1;
   p.room = r;
+  p.joinedAt = Date.now();
   r.players.push(p);
   broadcastRoom(r);
 }
 
 function createRoom(p, map, mode, priv, side, bots = true, custom = false) {
-  const r = { code: code(), map, mode, priv, bots, custom, host: p.id, players: [] };
+  const r = { code: code(), map, mode, priv, bots, custom, host: p.id, players: [], startedAt: Date.now(), lastResult: 0 };
   rooms.set(r.code, r);
   addToRoom(p, r, side);
   return r;
@@ -107,12 +110,51 @@ async function verify(token) {
   const u = await res.json();
   if (!u || !u.id) return null;
   const meta = u.user_metadata || {};
-  return { uid: u.id, name: String(meta.username || (u.email || 'jogador').split('@')[0]) };
+  return { uid: u.id, email: u.email || '', name: String(meta.username || (u.email || 'jogador').split('@')[0]) };
 }
 
 const clean = (s, n) => String(s || '').replace(/[^\w \-\.]/g, '').trim().slice(0, n);
 const pick = (v, list) => list.includes(v) ? v : list[0];
 const sideOf = m => (m.side === 0 || m.side === 1) ? m.side : 2;
+
+// ---------------------------- Progresso (XP, SHOTS, skins) ----------------------------
+async function sendProfile(p) {
+  if (!prog.ativo() || !p.uid) return;
+  try { applyProfile(p, await prog.carregar(p.uid, p.name)); } catch (e) { console.error('perfil', e.message); }
+}
+// Perfil novo: manda para o jogador e, se a skin equipada mudou, avisa a sala (os outros veem a arma nova).
+function applyProfile(p, perfil) {
+  const pub = prog.publico(perfil);
+  const before = (p.equip || []).join(',') + '/' + (p.lvl || 1);
+  p.equip = pub.equip; p.lvl = pub.lvl;
+  send(p, pub);
+  if (p.room && before !== p.equip.join(',') + '/' + p.lvl) broadcastRoom(p.room);
+}
+function creditado(r) {
+  for (const q of peers.values()) if (q.uid === r.uid) { applyProfile(q, r.perfil); send(q, { t: 'pixok', shots: r.shots }); }
+}
+// Fim de partida: so o dono da sala manda o placar. O servidor confere duracao e quem estava na sala.
+async function onResult(p, m) {
+  const r = p.room;
+  if (!r || r.host !== p.id || !prog.ativo() || !Array.isArray(m.players)) return;
+  const now = Date.now();
+  if (now - r.startedAt < prog.DURACAO_MIN * 1000 || now - r.lastResult < 30000) { r.startedAt = now; return; }
+  r.lastResult = now; r.startedAt = now;
+  const jogadores = new Map();
+  for (const q of r.players) {
+    if (!q.authed || q.away || !q.uid || now - (q.joinedAt || now) < PRESENCA_MIN_MS) continue;
+    if (String(q.uid).startsWith('guest:') && !ALLOW_GUESTS) continue;
+    jogadores.set(q.id, { uid: q.uid, nome: q.name, time: q.team });
+  }
+  const vencedor = m.winner === 0 || m.winner === 1 ? m.winner : -1;
+  const res = await prog.fimDePartida(m.players, vencedor, jogadores);
+  for (const { id, r: out } of res) {
+    const q = peers.get(id);
+    if (!q || !out.perfil) continue;
+    send(q, out.premio);
+    applyProfile(q, out.perfil);
+  }
+}
 
 async function onMessage(c, m) {
   const p = c.p;
@@ -143,8 +185,10 @@ async function onMessage(c, m) {
     p.agent = Math.max(0, Math.min(11, m.agent | 0));
     p.authed = true;
     p.resume = require('crypto').randomBytes(12).toString('hex');
+    p.email = who.email || '';
     send(p, { t: 'welcome', id: p.id, name: p.name, resume: p.resume, resumed: false });
     send(p, summary());
+    sendProfile(p);
     return;
   }
   if (!p.authed) { send(p, { t: 'error', err: 'Faca login primeiro.' }); return; }
@@ -179,6 +223,33 @@ async function onMessage(c, m) {
       break;
     }
     case 'leave': leave(p); send(p, summary()); break;
+    case 'profile': sendProfile(p); break;
+    case 'buy': {
+      if (!prog.ativo()) { send(p, { t: 'error', err: 'Loja indisponivel no momento.' }); break; }
+      const r = await prog.comprar(p.uid, p.name, String(m.skin || ''), m.w);
+      if (r.erro) { send(p, { t: 'shoperr', err: r.erro }); break; }
+      applyProfile(p, r.perfil);
+      break;
+    }
+    case 'equip': {
+      if (!prog.ativo()) break;
+      const r = await prog.equipar(p.uid, p.name, String(m.skin || ''), m.w);
+      if (r.erro) { send(p, { t: 'shoperr', err: r.erro }); break; }
+      applyProfile(p, r.perfil);
+      break;
+    }
+    case 'result': await onResult(p, m); break;
+    case 'pix': {
+      const r = await prog.criarPix(p.uid, p.name, p.email, String(m.pack || ''));
+      if (r.erro) send(p, { t: 'shoperr', err: r.erro }); else send(p, r.pix);
+      break;
+    }
+    case 'pixcheck': {
+      // O jogo pergunta de tempos em tempos enquanto o QR esta na tela (caso o webhook demore).
+      const r = await prog.conferirPagamento(String(m.id || '')).catch(() => null);
+      if (r) creditado(r);
+      break;
+    }
     case 'g': {
       // Mensagem de jogo: to = -1 host, 0 todos os outros, >0 um jogador.
       const r = p.room;
@@ -256,6 +327,23 @@ const server = http.createServer((req, res) => {
     res.writeHead(302, { location: DOWNLOAD_URL }); res.end(); return;
   }
   if (url === '/promo/menu.mp4') { servePromo(req, res); return; }
+  if (url === '/ranking.json') {
+    prog.ranking().then(list => { res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'max-age=30', 'access-control-allow-origin': '*' }); res.end(JSON.stringify(list)); })
+      .catch(e => { console.error('ranking', e.message); res.writeHead(503); res.end('[]'); });
+    return;
+  }
+  if (url === '/pix/webhook') {
+    // Mercado Pago avisa aqui; respondemos 200 sempre e conferimos o pagamento direto na API deles.
+    let body = '';
+    req.on('data', d => { if (body.length < 20000) body += d; });
+    req.on('end', () => {
+      res.writeHead(200); res.end('ok');
+      let j = {}; try { j = JSON.parse(body || '{}'); } catch (e) {}
+      const q = Object.fromEntries(new URLSearchParams(req.url.split('?')[1] || ''));
+      prog.webhookPix(req.headers, q, j).then(r => { if (r) creditado(r); }).catch(e => console.error('pix webhook', e.message));
+    });
+    return;
+  }
   if (url === '/voice/ice') { serveIce(res); return; }
   // Keep Unity's large data under GitHub's 50 MB recommendation while
   // streaming it as the single file path expected by the WebGL loader.
