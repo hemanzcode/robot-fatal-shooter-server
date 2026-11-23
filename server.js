@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { WebSocketServer } = require('ws');
 const prog = require('./progresso');
+const amigos = require('./amigos');
 
 const PORT = process.env.PORT || 8080;
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
@@ -32,6 +33,7 @@ function drop(p) {
     p.away = true; p.awayAt = Date.now(); p.ws = null;
     broadcastRoom(p.room);
   } else { leave(p); peers.delete(p.id); }
+  mudou(p.uid);
 }
 
 function code() {
@@ -77,6 +79,7 @@ function addToRoom(p, r, side) {
   p.joinedAt = Date.now();
   r.players.push(p);
   broadcastRoom(r);
+  mudou(p.uid);
 }
 
 function createRoom(p, map, mode, priv, side, bots = true, custom = false) {
@@ -90,6 +93,7 @@ function leave(p) {
   const r = p.room;
   if (!r) return;
   p.room = null;
+  mudou(p.uid);
   r.players = r.players.filter(q => q !== p);
   if (r.players.length === 0) { rooms.delete(r.code); return; }
   // O dono saiu: outro jogador assume a partida (a sala nao morre).
@@ -161,6 +165,89 @@ async function onResult(p, m) {
   }
 }
 
+// ---------------------------- Amigos ----------------------------
+// Cada jogador conectado guarda a propria lista (p.fr). Quando alguem entra, sai ou troca de sala,
+// os amigos online recebem a lista atualizada (agrupado a cada meio segundo).
+function peerDe(uid) { for (const q of peers.values()) if (q.authed && q.uid === uid && !q.kicked) return q; return null; }
+function estado(uid) {
+  const q = peerDe(uid);
+  if (!q) return { st: 0 };
+  if (q.room) return { st: 2, code: q.room.code, map: q.room.map, mode: q.room.mode, n: q.room.players.length };
+  return { st: q.away ? 0 : 1 };
+}
+function sendFriends(p) {
+  if (!p.fr) return;
+  const fr = [];
+  for (const [uid, i] of p.fr.acc) fr.push(Object.assign({ uid, name: i.nome, lvl: i.nivel || 1 }, estado(uid)));
+  fr.sort((a, b) => (b.st - a.st) || a.name.localeCompare(b.name));
+  const lista = m => [...m].map(([uid, i]) => ({ uid, name: i.nome, lvl: i.nivel || 1 }));
+  send(p, { t: 'friends', fr, inc: lista(p.fr.inc), sent: lista(p.fr.sent) });
+}
+async function loadFriends(p) {
+  if (!amigos.ativo() || !p.uid) return;
+  try { p.fr = await amigos.carregar(p.uid); sendFriends(p); } catch (e) { console.error('amigos', e.message); }
+}
+async function reloadUid(uid) { const q = peerDe(uid); if (q) await loadFriends(q); }
+const sujos = new Set(); let flushT = null;
+function mudou(uid) {
+  if (!uid) return;
+  sujos.add(uid);
+  if (!flushT) flushT = setTimeout(() => {
+    flushT = null;
+    const s = new Set(sujos); sujos.clear();
+    for (const q of peers.values()) if (q.fr && !q.away) for (const u of s) if (q.fr.acc.has(u)) { sendFriends(q); break; }
+  }, 500);
+}
+async function onFriend(p, m) {
+  if (!amigos.ativo()) { send(p, { t: 'fmsg', err: 'Amigos indisponivel no momento.' }); return; }
+  const uid = String(m.uid || '');
+  switch (m.t) {
+    case 'friends': await loadFriends(p); break;
+    case 'fadd': {
+      const nome = clean(m.name, 16).toUpperCase();
+      if (!nome) { send(p, { t: 'fmsg', err: 'Digite o nome do jogador.' }); return; }
+      if (nome === p.name) { send(p, { t: 'fmsg', err: 'Esse e voce :)' }); return; }
+      const on = [...peers.values()].find(q => q.authed && q.name === nome);
+      const alvo = on ? on.uid : await amigos.acharPorNome(nome);
+      if (!alvo) { send(p, { t: 'fmsg', err: 'Jogador ' + nome + ' nao encontrado.' }); return; }
+      const r = await amigos.pedir(p.uid, alvo);
+      if (r.erro) { send(p, { t: 'fmsg', err: r.erro }); return; }
+      send(p, { t: 'fmsg', ok: true, err: r.ok === 'amigos' ? 'Agora voces sao amigos!' : 'Pedido enviado para ' + nome + '.' });
+      await loadFriends(p); await reloadUid(alvo);
+      const q = peerDe(alvo);
+      if (q && r.ok === 'pedido') send(q, { t: 'freq', name: p.name });
+      break;
+    }
+    case 'fok': {
+      const r = await amigos.aceitar(p.uid, uid);
+      if (r.erro) { send(p, { t: 'fmsg', err: r.erro }); return; }
+      await loadFriends(p); await reloadUid(uid);
+      const q = peerDe(uid);
+      if (q) send(q, { t: 'fmsg', ok: true, err: p.name + ' aceitou seu pedido de amizade!' });
+      break;
+    }
+    case 'fno': {
+      await amigos.remover(p.uid, uid);
+      await loadFriends(p); await reloadUid(uid);
+      break;
+    }
+    case 'finv': {
+      if (!p.fr || !p.fr.acc.has(uid)) { send(p, { t: 'fmsg', err: 'So da para convidar amigos.' }); return; }
+      if (!p.room) { send(p, { t: 'fmsg', err: 'Entre ou crie uma sala para convidar.' }); return; }
+      const q = peerDe(uid);
+      if (!q || q.away) { send(p, { t: 'fmsg', err: 'Seu amigo esta offline.' }); return; }
+      if (q.room === p.room) { send(p, { t: 'fmsg', err: q.name + ' ja esta na sua sala.' }); return; }
+      const now = Date.now();
+      p.invAt = p.invAt || {};
+      if (now - (p.invAt[uid] || 0) < 10000) { send(p, { t: 'fmsg', err: 'Aguarde um pouco para convidar de novo.' }); return; }
+      p.invAt[uid] = now;
+      send(q, { t: 'finvite', name: p.name, code: p.room.code, map: p.room.map, mode: p.room.mode });
+      send(p, { t: 'fmsg', ok: true, err: 'Convite enviado para ' + q.name + '.' });
+      break;
+    }
+  }
+}
+
 async function onMessage(c, m) {
   const p = c.p;
   if (m.t === 'hello') {
@@ -173,7 +260,7 @@ async function onMessage(c, m) {
       for (const g of peers.values()) {
         if (g === p || !g.away || g.resume !== m.resume || g.uid !== who.uid) continue;
         peers.delete(p.id);
-        g.ws = p.ws; g.alive = true; g.away = false; c.p = g;
+        g.ws = p.ws; g.alive = true; g.away = false; c.p = g; mudou(g.uid);
         send(g, { t: 'welcome', id: g.id, name: g.name, resume: g.resume, resumed: true });
         if (g.room) broadcastRoom(g.room);
         else send(g, { t: 'closed', err: 'A sala fechou enquanto voce estava fora.' });
@@ -194,6 +281,8 @@ async function onMessage(c, m) {
     send(p, { t: 'welcome', id: p.id, name: p.name, resume: p.resume, resumed: false });
     send(p, summary());
     sendProfile(p);
+    amigos.lembrarNome(p.uid, p.name);
+    loadFriends(p).then(() => mudou(p.uid));
     return;
   }
   if (!p.authed) { send(p, { t: 'error', err: 'Faca login primeiro.' }); return; }
@@ -244,6 +333,7 @@ async function onMessage(c, m) {
       break;
     }
     case 'result': await onResult(p, m); break;
+    case 'friends': case 'fadd': case 'fok': case 'fno': case 'finv': await onFriend(p, m); break;
     case 'pix': {
       const r = await prog.criarPix(p.uid, p.name, p.email, String(m.pack || ''));
       if (r.erro) send(p, { t: 'shoperr', err: r.erro }); else send(p, r.pix);

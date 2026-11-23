@@ -43,3 +43,20 @@ create index if not exists pagamentos_user on public.pagamentos (user_id, criado
 alter table public.pagamentos enable row level security;
 drop policy if exists "ver os proprios pagamentos" on public.pagamentos;
 create policy "ver os proprios pagamentos" on public.pagamentos for select using (auth.uid() = user_id);
+
+-- Amigos: uma linha por par (quem pediu -> quem recebeu). status: 'pendente' ou 'aceito'.
+create table if not exists public.amizades (
+  de         uuid not null references auth.users(id) on delete cascade,
+  para       uuid not null references auth.users(id) on delete cascade,
+  status     text not null default 'pendente' check (status in ('pendente', 'aceito')),
+  criado     timestamptz not null default now(),
+  atualizado timestamptz not null default now(),
+  primary key (de, para),
+  check (de <> para)
+);
+create index if not exists amizades_para on public.amizades (para);
+create index if not exists perfis_nome on public.perfis (nome);
+
+alter table public.amizades enable row level security;
+drop policy if exists "ver as proprias amizades" on public.amizades;
+create policy "ver as proprias amizades" on public.amizades for select using (auth.uid() = de or auth.uid() = para);
