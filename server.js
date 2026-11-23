@@ -146,6 +146,11 @@ async function onResult(p, m) {
     if (String(q.uid).startsWith('guest:') && !ALLOW_GUESTS) continue;
     jogadores.set(q.id, { uid: q.uid, nome: q.name, time: q.team });
   }
+  // Regra: XP e SHOTS so em partida online SEM bots (sala "so os amigos" e ninguem controlado pelo computador).
+  if (r.bots || m.players.some(e => !e || (e.id | 0) === 0)) {
+    for (const id of jogadores.keys()) send(peers.get(id), { t: 'reward', xp: 0, shots: 0, lines: [], err: 'Partidas com bots nao valem XP nem SHOTS. Crie uma sala SO OS AMIGOS (SEM BOTS) para ganhar.' });
+    return;
+  }
   const vencedor = m.winner === 0 || m.winner === 1 ? m.winner : -1;
   const res = await prog.fimDePartida(m.players, vencedor, jogadores);
   for (const { id, r: out } of res) {
@@ -431,5 +436,6 @@ setInterval(() => {
   }
 }, 5000);
 
+loadPromo().catch(e => console.error('promo', e.message));   // ja deixa o video na memoria (o primeiro jogador nao espera)
 server.listen(PORT, () => console.log('Fatal Shooter server na porta ' + PORT + (SUPABASE_URL ? '' : ' (sem Supabase configurado)')));
 

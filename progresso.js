@@ -9,6 +9,8 @@ const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || '';
 const MP_TOKEN = process.env.MP_ACCESS_TOKEN || '';            // Mercado Pago (PIX)
 const MP_WEBHOOK_SECRET = process.env.MP_WEBHOOK_SECRET || '';  // assinatura do webhook (opcional, recomendado)
+// Periodo de testes: toda conta nova comeca com estes SHOTS (CREDITO_INICIAL=0 no Render desliga).
+const CREDITO_INICIAL = +(process.env.CREDITO_INICIAL ?? 10000);
 const PUBLIC_URL = (process.env.PUBLIC_URL || 'https://fatalshooter.com.br').replace(/\/$/, '');
 
 // ------------------------------------------------------------------ regras
@@ -46,7 +48,7 @@ const usaSupabase = () => !!(SUPABASE_URL && SERVICE_KEY);
 const ativo = () => usaSupabase() || process.env.ALLOW_GUESTS === '1';
 
 function novo(uid, nome) {
-  return { user_id: uid, nome, xp_total: 0, nivel: 1, shots: 0, xp_hoje: 0, dia: hoje(), vitoria_hoje: false,
+  return { user_id: uid, nome, xp_total: 0, nivel: 1, shots: CREDITO_INICIAL, xp_hoje: 0, dia: hoje(), vitoria_hoje: false,
     ultima: null, skins: [], equipadas: {}, partidas: 0, vitorias: 0, abates: 0, versao: 0 };
 }
 
