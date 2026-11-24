@@ -18,7 +18,7 @@ const MAX_PLAYERS = 10, TEAM_SIZE = 5;
 const AWAY_MS = +(process.env.AWAY_MS || 60000);
 const HOST_SWAP_MS = +(process.env.HOST_SWAP_MS || 6000);   // quem cai (ou sai do app) segura a vaga por 60 s e volta para a mesma sala
 const PRESENCA_MIN_MS = +(process.env.PRESENCA_MIN_S || 60) * 1000;   // quem entrou no finzinho nao ganha XP
-const MAPS = ['MERCADO', 'NO GELO'];
+const MAPS = ['MERCADO', 'NO GELO', 'A CASA'];
 const MODES = ['MATA-MATA', 'BOMBA'];
 
 let nextId = 1;
