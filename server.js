@@ -7,6 +7,7 @@ const path = require('path');
 const { WebSocketServer } = require('ws');
 const prog = require('./progresso');
 const amigos = require('./amigos');
+const npc = require('./npc');
 
 const PORT = process.env.PORT || 8080;
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
@@ -333,6 +334,12 @@ async function onMessage(c, m) {
       break;
     }
     case 'result': await onResult(p, m); break;
+    case 'npc': {
+      // Campanha: pede uma fala por IA. Sem chave ou acima do limite, devolve vazio e o jogo usa a fala pronta.
+      const line = await npc.falar(p.uid, m.who, String(m.ev || '').slice(0, 24), m.ctx, m.say);
+      send(p, { t: 'npcline', name: String(m.who || '').slice(0, 12), code: String(m.ev || '').slice(0, 24), id: m.rid | 0, d: line || '', ok: !!line });
+      break;
+    }
     case 'friends': case 'fadd': case 'fok': case 'fno': case 'finv': await onFriend(p, m); break;
     case 'pix': {
       const r = await prog.criarPix(p.uid, p.name, p.email, String(m.pack || ''));
