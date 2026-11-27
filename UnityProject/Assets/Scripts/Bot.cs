@@ -165,7 +165,7 @@ public class Bot : MonoBehaviour
 
         Vector3 moveDir = Vector3.zero;
         Vector3 lookDir = transform.forward;
-        float speed = 4.5f;
+        float speed = PlayerController.TacticalMode ? 4.5f : 5.6f;
         bool fighting = target != null && target.alive && targetVisible;
         Fighting = fighting;
 
@@ -184,7 +184,7 @@ public class Bot : MonoBehaviour
                 }
                 moveDir = transform.right * strafeSign;
                 if (dist < prefRange * 0.5f) moveDir -= transform.forward * 0.8f;
-                speed = 3.5f;
+                speed = PlayerController.TacticalMode ? 3.5f : 4.4f;
             }
             TryFire(to, dist);
         }

@@ -26,10 +26,12 @@ public class GreyboxCombatTest : MonoBehaviour
     float lastMeasuredTTK = -1f;
     static GUIStyle boxStyle;
 
+    void OnDestroy() { PlayerController.ForceMode = -1; }
+
     void Start()
     {
         if (Game.I == null) return;
-        PlayerController.TacticalMode = true;
+        PlayerController.ForceMode = 1;
         Settings.fov = 62f; // FOV entre 60 e 65 graus
 
         Actor player = SpawnActor("VOCE", 0, true, new Vector3(0f, 0f, 0f), 0f, 0);

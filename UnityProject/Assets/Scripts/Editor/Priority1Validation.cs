@@ -7,6 +7,7 @@ public static class Priority1Validation
     public static void BuildAndValidate()
     {
         GreyboxSceneBuilder.Build();
+        PlayerController.ForceMode = 1;
 
         // 1. Validate Actor HP & Tagging
         GameObject g = new GameObject("TestActor");
@@ -71,6 +72,7 @@ public static class Priority1Validation
         Object.DestroyImmediate(cObj);
         Object.DestroyImmediate(gmObj);
         Game.I = null;
+        PlayerController.ForceMode = -1;
 
         Debug.Log("[Priority1Validation] ALL CHECKS PASSED! VETOR shots=" + shotsToKill + " TTK=" + ttk.ToString("0.000") + "s d12=" + d12.ToString("0.0") + " d25=" + d25.ToString("0.0"));
     }

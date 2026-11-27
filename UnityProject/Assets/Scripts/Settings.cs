@@ -29,6 +29,7 @@ public static class Settings
     public static readonly string[] GfxNames = { "DESEMPENHO", "EQUILIBRADO", "NITIDO" };
     public static float hudAlpha = 0.6f;
     public static bool aimHold;
+    public static bool tactical;            // modo de jogo: false DIVERSAO (classico), true TATICO
     public static int gyroMode = 1;         // 0 = desligado, 1 = so ADS, 2 = sempre
     public static float gyroSens = 1.0f;
     public static bool voiceOn = true;      // ouvir/falar com o time
@@ -60,6 +61,7 @@ public static class Settings
         side = Mathf.Clamp(PlayerPrefs.GetInt("na_side", 2), 0, 2);
         gfx = Mathf.Clamp(PlayerPrefs.GetInt("na_gfx", 1), 0, 2);
         hudAlpha = Mathf.Clamp(PlayerPrefs.GetFloat("na_hudalpha", 0.6f), 0.2f, 1f);
+        tactical = PlayerPrefs.GetInt("na_tactical", 0) == 1;
         aimHold = PlayerPrefs.GetInt("na_aimhold", 0) == 1;
         gyroMode = Mathf.Clamp(PlayerPrefs.GetInt("na_gyromode", 1), 0, 2);
         gyroSens = Mathf.Clamp(PlayerPrefs.GetFloat("na_gyrosens", 1.0f), 0.1f, 3f);
@@ -88,6 +90,7 @@ public static class Settings
         PlayerPrefs.SetInt("na_side", side);
         PlayerPrefs.SetInt("na_gfx", gfx);
         PlayerPrefs.SetFloat("na_hudalpha", hudAlpha);
+        PlayerPrefs.SetInt("na_tactical", tactical ? 1 : 0);
         PlayerPrefs.SetInt("na_aimhold", aimHold ? 1 : 0);
         PlayerPrefs.SetInt("na_gyromode", gyroMode);
         PlayerPrefs.SetFloat("na_gyrosens", gyroSens);

@@ -828,12 +828,25 @@ public class Menus : MonoBehaviour
     void DrawControls(float x)
     {
         Title(x, 90f, "CONTROLES", null);
-        bool tac = PlayerController.TacticalMode;
+
+        // Modo de jogo: DIVERSAO (classico) ou TATICO (serio). So muda fora da partida.
+        UI.Caption(x, 162f, 620f, "MODO DE JOGO");
+        bool inMatch = Game.I != null && Game.I.state != Game.State.Menu;
+        bool before = Settings.tactical;
+        if (Button(x, 188f, 305f, 54f, "DIVERSAO", !Settings.tactical, 22) && !inMatch) Settings.tactical = false;
+        if (Button(x + 315f, 188f, 305f, 54f, "TATICO", Settings.tactical, 22) && !inMatch) Settings.tactical = true;
+        if (Settings.tactical != before) Settings.Save();
+        string modeInfo = inMatch ? "Para trocar o modo, saia da partida e volte aqui pelo menu principal."
+            : Settings.tactical ? "Serio: 100 de vida, sem pulo duplo, dash nem habilidade C, movimento mais lento e dano que cai com a distancia."
+            : "Classico: 200 de vida, pulo duplo, dash (E), habilidade C e movimento rapido.";
+        UI.Wrap(new Rect(x, 248f, 620f, 44f), modeInfo + "  Salas online usam DIVERSAO por enquanto.", UI.Body, 15, UI.Muted);
+
+        bool tac = Settings.tactical;
         string[,] rows = tac ? new string[,]
         {
             { "W A S D", "Mover" },
             { "MOUSE", "Olhar" },
-            { "SHIFT", "Correr (atirar logo depois tem um pequeno atraso)" },
+            { "SHIFT", "Correr (pequeno atraso para atirar)" },
             { "ESPACO", "Pular" },
             { "MOUSE ESQ.", "Atirar" },
             { "MOUSE DIR.", "Mirar" },
@@ -844,7 +857,8 @@ public class Menus : MonoBehaviour
             { "SHIFT na luneta", "Prender o folego" },
             { "Q", "Habilidade / granada" },
             { "X", "Sobrecarga (carrega com abates)" },
-            { "CTRL  /  C", "Agachar (segurar)  /  agachar (liga e desliga)" },
+            { "CTRL  /  C", "Agachar: segurar  /  liga-desliga" },
+            { "B", "Deitar (liga e desliga)" },
             { "V  (SEGURAR)", "Falar com o time (salas online)" },
             { "Z  /  BOTAO DO MEIO", "Marcar para o time (inimigo, vida...)" },
             { "TAB", "Placar" },
@@ -867,19 +881,20 @@ public class Menus : MonoBehaviour
             { "C", "Utilidade secundaria (quando disponivel)" },
             { "X", "Sobrecarga (carrega com abates)" },
             { "CTRL", "Agachar (tiro mais preciso)" },
+            { "B", "Deitar (liga e desliga)" },
             { "V  (SEGURAR)", "Falar com o time (salas online)" },
             { "Z  /  BOTAO DO MEIO", "Marcar para o time (inimigo, vida...)" },
             { "TAB", "Placar" },
             { "ESC", "Pausar" }
         };
-        float y = 220f;
+        float y = 306f, rh = 34f;
         for (int i = 0; i < rows.GetLength(0); i++)
         {
-            Game.Fill(x, y + i * 42f, 620f, 38f, new Color(1f, 1f, 1f, i % 2 == 0 ? 0.05f : 0.02f));
-            Game.Text(x + 14f, y + i * 42f, 260f, 38f, rows[i, 0], 19, Accent, TextAnchor.MiddleLeft);
-            Game.Text(x + 280f, y + i * 42f, 340f, 38f, rows[i, 1], 19, Color.white, TextAnchor.MiddleLeft);
+            Game.Fill(x, y + i * rh, 620f, rh - 4f, new Color(1f, 1f, 1f, i % 2 == 0 ? 0.05f : 0.02f));
+            Game.Text(x + 14f, y + i * rh, 260f, rh - 4f, rows[i, 0], 17, Accent, TextAnchor.MiddleLeft);
+            Game.Text(x + 280f, y + i * rh, 340f, rh - 4f, rows[i, 1], 16, Color.white, TextAnchor.MiddleLeft);
         }
-        if (Button(x, y + rows.GetLength(0) * 42f + 30f, 520f, 58f, "VOLTAR")) Back();
+        if (Button(x, y + rows.GetLength(0) * rh + 14f, 520f, 54f, "VOLTAR")) Back();
     }
 
     void DrawCredits(float x)

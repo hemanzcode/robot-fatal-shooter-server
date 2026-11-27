@@ -16,7 +16,9 @@ public class PlayerController : MonoBehaviour
     public float overUntil;        // sobrecarga ativa ate este instante
     public bool ads;
     public float curSpread;
-    public static bool TacticalMode = true;
+    // Modo de jogo: TATICO (serio) ou DIVERSAO (o jogo classico). Escolhido em CONTROLES; online por enquanto e sempre DIVERSAO.
+    public static int ForceMode = -1;   // cenas de teste: 1 tatico, 0 diversao
+    public static bool TacticalMode { get { return ForceMode >= 0 ? ForceMode == 1 : (Settings.tactical && !NetGame.Online); } }
     public const float WalkSpeed = 4.8f;
     public const float SprintSpeed = 6.3f;
     public const float AdsSpeed = 3.2f;      // 4.0f - 20%
@@ -786,6 +788,20 @@ public class PlayerController : MonoBehaviour
 
         bool aurora = !TacticalMode && actor.agent == 5;
         WeaponDef w = Weapons.All[cur];
+        float speed;
+        if (!TacticalMode)
+        {
+            // DIVERSAO: movimento classico (mais rapido, sem atraso para atirar depois de correr).
+            isSprinting = GameInput.Sprint && mv.y > 0.1f && !ads && !actor.crouching && !actor.prone;
+            sprintFireReady = 0f; sprintBlockUntil = 0f;
+            speed = ads ? 4f : (isSprinting ? (aurora ? 11.5f : 9.5f) : (aurora ? 8f : 6.5f));
+            if (aurora && Time.time < speedBoostUntil) speed *= 1.3f;
+            if (actor.prone) speed = Mathf.Min(speed, ProneSpeed);
+            else if (actor.crouching) speed = Mathf.Min(speed, 3.2f);
+            hvel = Vector3.Lerp(hvel, wish * speed, 1f - Mathf.Exp(-(grounded ? 12f : 3f) * dt));
+        }
+        else
+        {
         bool firingHeld = w.auto ? GameInput.Fire : GameInput.FireDown;
         bool wantSprint = GameInput.Sprint && mv.y > 0.1f && !ads && !actor.crouching && !actor.prone && grounded;
         if (wantSprint && !firingHeld && Time.time >= sprintBlockUntil)
@@ -804,7 +820,7 @@ public class PlayerController : MonoBehaviour
         }
 
         // Velocidade base reduzida em 20% no modo tatico + multiplicadores direcionais continuos (1.0 frente, 0.8 strafe, 0.7 recuo)
-        float speed = ads ? AdsSpeed : (isSprinting ? (aurora ? 9.2f : SprintSpeed) : (aurora ? 6.4f : WalkSpeed));
+        speed = ads ? AdsSpeed : (isSprinting ? (aurora ? 9.2f : SprintSpeed) : (aurora ? 6.4f : WalkSpeed));
         if (aurora && Time.time < speedBoostUntil) speed *= 1.3f;
         if (actor.prone) speed = Mathf.Min(speed, ProneSpeed);
         else if (actor.crouching) speed = Mathf.Min(speed, CrouchSpeed);
@@ -844,6 +860,7 @@ public class PlayerController : MonoBehaviour
             float rate = (accelRef / (AccelTime * wMass)) * airMult;
             hvel = Vector3.Lerp(hvel, targetVel, 1f - Mathf.Exp(-11f * airMult * dt / wMass));
             hvel = Vector3.MoveTowards(hvel, targetVel, rate * 0.55f * dt);
+        }
         }
         prevVy = vy;
 
@@ -942,15 +959,26 @@ public class PlayerController : MonoBehaviour
         }
 
         bloom = Mathf.Max(0f, bloom - 5f * Time.deltaTime);
-        float hsNow = new Vector3(hvel.x, 0f, hvel.z).magnitude;
-        float moveFrac = Mathf.Clamp01(hsNow / SprintSpeed);
-        curSpread = (ads ? w.adsSpread : w.spread) + bloom * (ads ? 0.4f : 1f) + moveFrac * (ads ? 0.45f : 2.2f) + (isSprinting ? 2.5f : 0f) + (cc.isGrounded ? 0f : 3.2f);
-        // Sniper andando em pe perde precisao: exige parar, agachar ou deitar para disparo preciso.
-        if (cur == 2 && !actor.crouching && !actor.prone && hsNow > 0.45f) curSpread += moveFrac * (ads ? 3.8f : 5.5f);
-        float proneTrans = Mathf.Abs((actor.prone ? 1f : 0f) - actor.proneK);
-        if (proneTrans > 0.08f) curSpread += 2.2f * proneTrans;   // penalidade momentanea durante drop-shot
-        if (actor.proneK > 0.5f && cc.isGrounded) curSpread *= 0.40f;   // deitado: maxima estabilidade/precisao
-        else if (actor.crouchK > 0.5f && cc.isGrounded) curSpread *= 0.65f;   // agachado: tiro mais preciso
+        if (TacticalMode)
+        {
+            float hsNow = new Vector3(hvel.x, 0f, hvel.z).magnitude;
+            float moveFrac = Mathf.Clamp01(hsNow / SprintSpeed);
+            curSpread = (ads ? w.adsSpread : w.spread) + bloom * (ads ? 0.4f : 1f) + moveFrac * (ads ? 0.45f : 2.2f) + (isSprinting ? 2.5f : 0f) + (cc.isGrounded ? 0f : 3.2f);
+            // Sniper andando em pe perde precisao: exige parar, agachar ou deitar para disparo preciso.
+            if (cur == 2 && !actor.crouching && !actor.prone && hsNow > 0.45f) curSpread += moveFrac * (ads ? 3.8f : 5.5f);
+            float proneTrans = Mathf.Abs((actor.prone ? 1f : 0f) - actor.proneK);
+            if (proneTrans > 0.08f) curSpread += 2.2f * proneTrans;   // penalidade momentanea durante drop-shot
+            if (actor.proneK > 0.5f && cc.isGrounded) curSpread *= 0.40f;   // deitado: maxima estabilidade/precisao
+            else if (actor.crouchK > 0.5f && cc.isGrounded) curSpread *= 0.65f;   // agachado: tiro mais preciso
+        }
+        else
+        {
+            // DIVERSAO: dispersao classica.
+            float moveFrac = Mathf.Clamp01(new Vector3(hvel.x, 0f, hvel.z).magnitude / 9.5f);
+            curSpread = (ads ? w.adsSpread : w.spread) + bloom * (ads ? 0.45f : 1f) + moveFrac * (ads ? 0.3f : 1.1f) + (cc.isGrounded ? 0f : 1.6f);
+            if (actor.proneK > 0.5f && cc.isGrounded) curSpread *= 0.40f;
+            else if (actor.crouchK > 0.5f && cc.isGrounded) curSpread *= 0.7f;
+        }
 
         if (reloading)
         {
@@ -1119,7 +1147,7 @@ public class PlayerController : MonoBehaviour
         float dt = Time.deltaTime;
         bool effAds = ads && wallReadyK < 0.55f;
         float baseFov = Settings.fov;
-        float sprintFov = (isSprinting && !effAds) ? baseFov + 5f : baseFov;
+        float sprintFov = (isSprinting && !effAds) ? baseFov + (TacticalMode ? 5f : 6f) : baseFov;
         float targetFov = effAds ? w.zoomFov * baseFov / 90f : sprintFov;
         cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFov, 1f - Mathf.Exp(-14f * dt));
 

@@ -18,7 +18,7 @@ public class Actor : MonoBehaviour
     public float lastPadTime = -99f;
     public float pendingLaunch;
     public float blindUntil, stunnedUntil, invulnerableUntil, revealedUntil, taggedUntil;
-    public float MoveSpeedMult { get { return Time.time < taggedUntil ? 0.65f : 1f; } }
+    public float MoveSpeedMult { get { return PlayerController.TacticalMode && Time.time < taggedUntil ? 0.65f : 1f; } }
     public Vector3 externalVel;
     public Vector3 velocity;
     public bool noRespawn;
@@ -57,7 +57,8 @@ public class Actor : MonoBehaviour
         displayName = n;
         team = t;
         isPlayer = player;
-        if (!PlayerController.TacticalMode && Mathf.Abs(agentIndex) % AgentBody.Defs.Length == 6) maxHealth = health = 250f;
+        // Vida: 100 no modo TATICO, 200 no DIVERSAO (Brutus 250).
+        maxHealth = health = PlayerController.TacticalMode ? 100f : (Mathf.Abs(agentIndex) % AgentBody.Defs.Length == 6 ? 250f : 200f);
         if (!player && buildBody) BuildModel();
     }
 

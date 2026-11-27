@@ -33,7 +33,31 @@ public class WeaponDef
 
 public static class Weapons
 {
-    public static readonly WeaponDef[] All =
+    // A tabela usada depende do modo de jogo (TATICO ou DIVERSAO).
+    public static WeaponDef[] All { get { return PlayerController.TacticalMode ? Tactical : Classic; } }
+
+    // DIVERSAO: os valores classicos. Pulso perde forca com a distancia como antes; as outras armas, dano cheio.
+    public static readonly WeaponDef[] Classic =
+    {
+        new WeaponDef { name = "VETOR", sound = "rifle", damage = 25f, headMult = 2f, chestMult = 1.2f, interval = 0.095f, magSize = 30, reserve = 120, reloadTime = 1.9f,
+                        spread = 0.5f, adsSpread = 0.08f, bloom = 0.26f, recoilPitch = 0.55f, recoilYaw = 0.35f, auto = true, zoomFov = 60f,
+                        sprintToFire = 0f, dropoffStart = 9999f, dropoffEnd = 10000f, minDamageMult = 1f, color = Art.Cyan },
+        new WeaponDef { name = "PULSO", sound = "shotgun", damage = 10f, headMult = 1.3f, chestMult = 1.1f, interval = 0.8f, magSize = 6, reserve = 30, reloadTime = 2.3f,
+                        spread = 4.2f, adsSpread = 3.2f, bloom = 0f, recoilPitch = 3.5f, recoilYaw = 1f, pellets = 9, range = 45f, zoomFov = 72f,
+                        sprintToFire = 0f, dropoffStart = 6f, dropoffEnd = 45f, minDamageMult = 0.3f, color = Art.Orange },
+        new WeaponDef { name = "SNIPER", sound = "sniper", damage = 80f, headMult = 2f, chestMult = 1.15f, interval = 1.5f, magSize = 5, reserve = 20, reloadTime = 3.1f,
+                        spread = 3.2f, adsSpread = 0f, bloom = 0f, recoilPitch = 6.5f, recoilYaw = 1.1f, range = 600f, zoomFov = 18f,
+                        sprintToFire = 0f, dropoffStart = 9999f, dropoffEnd = 10000f, minDamageMult = 1f, color = new Color(1f, 0.85f, 0.55f) },
+        new WeaponDef { name = "BAZUCA", sound = "rocket", damage = 90f, interval = 1f, magSize = 3, reserve = 9, reloadTime = 2.8f,
+                        spread = 0.3f, adsSpread = 0.1f, bloom = 0f, recoilPitch = 3f, recoilYaw = 0.5f, projectile = true, projSpeed = 48f, projRadius = 6.5f, zoomFov = 72f,
+                        sprintToFire = 0f, dropoffStart = 9999f, dropoffEnd = 10000f, minDamageMult = 1f, color = new Color(1f, 0.6f, 0.2f) },
+        new WeaponDef { name = "PLASMA", sound = "rail", damage = 35f, headMult = 1.5f, chestMult = 1.15f, interval = 0.15f, magSize = 40, reserve = 160, reloadTime = 2.2f,
+                        spread = 0.6f, adsSpread = 0.2f, bloom = 0.05f, recoilPitch = 0.5f, recoilYaw = 0.3f, auto = true, projectile = true, projSpeed = 75f, projRadius = 1.8f, zoomFov = 65f,
+                        sprintToFire = 0f, dropoffStart = 9999f, dropoffEnd = 10000f, minDamageMult = 1f, color = Art.Green }
+    };
+
+    // TATICO: TTK curto, queda de dano com a distancia e atraso para atirar depois de correr.
+    public static readonly WeaponDef[] Tactical =
     {
         new WeaponDef { name = "VETOR", sound = "rifle", damage = 26f, headMult = 2f, chestMult = 1.1f, interval = 0.095f, magSize = 30, reserve = 120, reloadTime = 1.9f,
                         spread = 0.5f, adsSpread = 0.08f, bloom = 0.26f, recoilPitch = 0.55f, recoilYaw = 0.35f, auto = true, zoomFov = 60f,
