@@ -9,12 +9,21 @@ public class Menus : MonoBehaviour
     string fEmail = "", fUser = "", fPass = "", fCode = "", fFriend = "";
     bool friendsTab; int friendScroll; string removeAsk = "";
     public Page page = Page.None;
+    // O video do menu cobre a tela inteira (opaco): ai a camera do menu nao precisa desenhar o mapa por tras.
+    public bool VideoCovers
+    {
+        get
+        {
+            if (Game.I == null || Game.I.state != Game.State.Menu || page == Page.None || page == Page.Agents || page == Page.Shop) return false;
+            return MenuVideo.Tex != null && MenuVideo.Alpha >= 1f;
+        }
+    }
     Page backTo = Page.Main;
 
     public bool IsOpen { get { return page != Page.None; } }
 
-    static readonly Color Accent = new Color(1f, 0.86f, 0.1f);
-    static readonly Color Panel = new Color(0.02f, 0.025f, 0.04f, 0.9f);
+    static readonly Color Accent = UI.Yellow;                 // identidade nova: amarelo so em detalhes
+    static readonly Color Panel = UI.A(UI.Bg, 0.9f);
 
     public void Open(Page p)
     {
@@ -62,38 +71,13 @@ public class Menus : MonoBehaviour
 
     bool Button(float x, float y, float w, float h, string label, bool primary = false, int size = 24)
     {
-        Rect r = new Rect(x, y, w, h);
-        Event e = Event.current;
-        bool hover = r.Contains(e.mousePosition);
-        Color bg = primary ? new Color(Accent.r, Accent.g, Accent.b, hover ? 1f : 0.88f)
-                           : (hover ? new Color(1f, 1f, 1f, 0.16f) : new Color(1f, 1f, 1f, 0.06f));
-        Game.Fill(x, y, w, h, bg);
-        Game.Fill(x, y, 5f, h, hover || primary ? Accent : new Color(1f, 1f, 1f, 0.25f));
-        Color tc = primary ? new Color(0.03f, 0.03f, 0.04f) : (hover ? Color.white : new Color(1f, 1f, 1f, 0.85f));
-        // Texto sem sombra nos botoes amarelos para manter a leitura.
-        if (primary)
-        {
-            GUIStyle st = new GUIStyle(GUI.skin.label);
-            st.fontStyle = FontStyle.Bold;
-            st.fontSize = size;
-            st.alignment = TextAnchor.MiddleLeft;
-            st.normal.textColor = tc;
-            GUI.Label(new Rect(x + 24f, y, w - 30f, h), label, st);
-        }
-        else Game.Text(x + 24f, y, w - 30f, h, label, size, tc, TextAnchor.MiddleLeft);
-
-        if (e.type == EventType.MouseDown && e.button == 0 && hover)
-        {
-            e.Use();
-            Sfx.UI("hit", 0.45f, 0.8f);
-            return true;
-        }
-        return false;
+        bool small = w < 80f;   // setas dos seletores: texto centralizado
+        return UI.Button(new Rect(x, y, w, h), label, primary ? UI.Kind.Primary : UI.Kind.Normal, size, true, null, null, small ? TextAnchor.MiddleCenter : TextAnchor.MiddleLeft);
     }
 
     float Slider(float x, float y, float w, string label, float value, float min, float max, string format)
     {
-        Game.Text(x, y, 360f, 40f, label, 22, new Color(1f, 1f, 1f, 0.85f), TextAnchor.MiddleLeft);
+        Game.Text(x, y, 360f, 40f, label, 22, UI.Text2, TextAnchor.MiddleLeft);
         float sx = x + 370f, sw = w - 370f - 110f;
         Rect track = new Rect(sx, y + 6f, sw, 28f);
         Event e = Event.current;
@@ -103,9 +87,9 @@ public class Menus : MonoBehaviour
             e.Use();
         }
         float k = Mathf.InverseLerp(min, max, value);
-        Game.Fill(sx, y + 17f, sw, 6f, new Color(1f, 1f, 1f, 0.18f));
-        Game.Fill(sx, y + 17f, sw * k, 6f, Accent);
-        Game.Fill(sx + sw * k - 5f, y + 8f, 10f, 24f, Color.white);
+        Game.Fill(sx, y + 18f, sw, 4f, UI.Line);
+        Game.Fill(sx, y + 18f, sw * k, 4f, UI.Text2);
+        Game.Fill(sx + sw * k - 4f, y + 9f, 8f, 22f, UI.Yellow);
         Game.Text(x + w - 100f, y, 100f, 40f, value.ToString(format), 22, Color.white, TextAnchor.MiddleRight);
         return value;
     }
@@ -113,11 +97,11 @@ public class Menus : MonoBehaviour
     // Seletor com setas: devolve -1, 0 ou +1.
     int Stepper(float x, float y, float w, string label, string value)
     {
-        Game.Text(x, y, 360f, 44f, label, 22, new Color(1f, 1f, 1f, 0.85f), TextAnchor.MiddleLeft);
+        Game.Text(x, y, 360f, 44f, label, 22, UI.Text2, TextAnchor.MiddleLeft);
         float sx = x + 370f, sw = w - 370f;
         int delta = 0;
         if (Button(sx, y, 54f, 44f, "<")) delta = -1;
-        Game.Fill(sx + 60f, y, sw - 120f, 44f, new Color(1f, 1f, 1f, 0.06f));
+        UI.PanelBox(new Rect(sx + 60f, y, sw - 120f, 44f), 0.85f);
         Game.Text(sx + 60f, y, sw - 120f, 44f, value, value.Length > 10 ? 16 : value.Length > 8 ? 18 : 22, Color.white, TextAnchor.MiddleCenter);
         if (Button(sx + sw - 54f, y, 54f, 44f, ">")) delta = 1;
         return delta;
@@ -126,7 +110,7 @@ public class Menus : MonoBehaviour
     // Escolha de time: BAAL (azul), MOLOCH (vermelho) ou automatico.
     void TeamPicker(float x, float y, float w, string label)
     {
-        Game.Text(x, y, 360f, 44f, label, 22, new Color(1f, 1f, 1f, 0.85f), TextAnchor.MiddleLeft);
+        Game.Text(x, y, 360f, 44f, label, 22, UI.Text2, TextAnchor.MiddleLeft);
         // Rotulo curto ("SEU TIME"): sobra mais largura para os 3 botoes.
         float sx = x + (w >= 600f ? 190f : 0f), sw = w - (w >= 600f ? 190f : 0f);
         if (w < 600f) { y += 48f; }
@@ -150,9 +134,7 @@ public class Menus : MonoBehaviour
 
     void Title(float x, float y, string text, string sub)
     {
-        Game.Fill(x, y + 8f, 8f, 60f, Accent);
-        Game.Text(x + 26f, y, 1200f, 76f, text, 60, Color.white, TextAnchor.MiddleLeft);
-        if (sub != null) Game.Text(x + 28f, y + 74f, 1200f, 32f, sub, 20, new Color(1f, 1f, 1f, 0.6f), TextAnchor.MiddleLeft);
+        UI.Title(x, y + 4f, text, sub);
     }
 
     // ------------------------------- Paginas -------------------------------
@@ -164,6 +146,12 @@ public class Menus : MonoBehaviour
         if (page == Page.None || page == Page.Hud || Game.I == null) return;
         GUI.depth = -10;
         Game.EnsureStyle();
+        Game.textFont = UI.BodyBold; Game.textShadow = false;   // fonte e visual novos nos menus
+        try { DrawPage(); } finally { Game.textFont = null; Game.textShadow = true; }
+    }
+
+    void DrawPage()
+    {
         float s = Screen.height / 1080f;
         GUI.matrix = Matrix4x4.Scale(new Vector3(s, s, 1f));
         float vw = Screen.width / s, vh = 1080f;
@@ -171,8 +159,8 @@ public class Menus : MonoBehaviour
         float cx = vw / 2f, cy = vh / 2f;
         bool inGame = Game.I.state != Game.State.Menu;
 
-        // Fora da partida: o video promocional cobre a tela inteira (cidade e agente ficam escondidos atras).
-        Texture vid = inGame || page == Page.Agents || page == Page.Shop ? null : MenuVideo.Tex;   // em AGENTES o modelo 3D precisa aparecer
+        // Identidade nova: atras do menu fica a cena do jogo com o agente (MenuBackdrop); o video nao e mais usado.
+        Texture vid = null;
         if (vid != null)
         {
             Color keep = GUI.color;
@@ -181,8 +169,16 @@ public class Menus : MonoBehaviour
             GUI.color = keep;
         }
         // Fundo: faixa escura a esquerda (ou escurece o jogo pausado).
-        Game.Fill(0f, 0f, vw, vh, new Color(0f, 0f, 0f, inGame ? 0.62f : (vid != null ? 0.12f : 0.3f)));
-        if (page != Page.End) Game.Fill(0f, 0f, page == Page.Agents ? 700f : 760f, vh, Panel);
+        if (inGame) Game.Fill(0f, 0f, vw, vh, new Color(0f, 0f, 0f, 0.62f));
+        if (page != Page.End)
+        {
+            // Escuro a esquerda (leitura dos botoes) sumindo para a direita, onde fica o agente.
+            float pw = page == Page.Agents ? 700f : 760f;
+            if (page == Page.Main) pw = TouchPad.On ? Mathf.Min(1150f, vw * 0.52f) + 120f : 620f;
+            UI.Fill(new Rect(0f, 0f, pw, vh), UI.A(UI.Bg, 0.93f));
+            UI.GradientH(new Rect(pw, 0f, 520f, vh), UI.A(UI.Bg, 0.93f), UI.A(UI.Bg, 0f));
+            if (!inGame) UI.GradientUp(new Rect(0f, vh - 300f, vw, 300f), UI.A(UI.Bg, 0.85f));
+        }
 
         float x = 90f;
         switch (page)
@@ -203,28 +199,121 @@ public class Menus : MonoBehaviour
 
     void DrawMain(float x, float vh)
     {
-        Game.Text(x, 96f, 700f, 110f, "FATAL SHOOTER", 48, Color.white, TextAnchor.MiddleLeft);
-        if (Skins.Server) Wallet(x, 40f);
-        Game.Fill(x, 208f, 250f, 6f, Accent);
-        Game.Text(x, 226f, 700f, 34f, "FPS TATICO  //  SETOR ARIDO, 14:20", 20, new Color(1f, 1f, 1f, 0.6f), TextAnchor.MiddleLeft);
+        bool phone = TouchPad.On;
+        float vw = screenW, m = phone ? 70f : 85f;
+        float k = phone ? 1.75f : 1f;   // no celular tudo maior (a tela fisica e pequena)
 
-        float y = 290f, w = 520f, h = 58f, gap = 66f;
-        if (Button(x, y, w, h, "JOGAR ONLINE", true))
+        // Marca
+        UI.Label(new Rect(m, phone ? 34f : 44f, 900f, 70f * k), "FATAL SHOOTER", UI.HeadBold, Mathf.RoundToInt(54f * k), UI.Text, TextAnchor.MiddleLeft);
+        float ly = (phone ? 34f : 44f) + 70f * k + 2f;
+        UI.Fill(new Rect(m + 2f, ly, 37f * k, 3f * k), UI.Yellow);
+        if (!phone) UI.Label(new Rect(m + 52f, ly - 13f, 600f, 28f), "FPS TÁTICO  ·  SETOR ÁRIDO", UI.Body, 16, UI.Muted, TextAnchor.MiddleLeft);
+
+        // Perfil do jogador (canto superior direito)
+        if (Skins.Server) ProfileChip(vw - m, phone ? 30f : 40f, phone);
+
+        // Botoes: principal, segundo nivel, terceiro nivel
+        Net n = null;
+        if (!phone)
         {
-            Net n = Net.Ensure();
-            if (n.loggedIn) { n.Connect(); Goto(Page.Online, Page.Main); } else Goto(Page.Login, Page.Main);
+            float y = 250f, w = 510f;
+            if (UI.Button(new Rect(m, y, w, 88f), "JOGAR ONLINE", UI.Kind.Primary, 36, true, "Salas, partida rápida e amigos")) PlayOnline(ref n);
+            y += 96f;
+            if (UI.Button(new Rect(m, y, w, 70f), "CAMPANHA", UI.Kind.Normal, 29)) StartCampaignBtn();
+            y += 78f;
+            if (UI.Button(new Rect(m, y, w, 70f), "TREINO CONTRA BOTS", UI.Kind.Normal, 29)) Goto(Page.Setup, Page.Main);
+            y += 84f;
+            float hw = (w - 8f) / 2f;
+            if (UI.Button(new Rect(m, y, hw, 62f), "AGENTES", UI.Kind.Normal, 26)) Goto(Page.Agents, Page.Main);
+            if (UI.Button(new Rect(m + hw + 8f, y, hw, 62f), "LOJA", UI.Kind.Normal, 26)) { OpenShopNet(); Goto(Page.Shop, Page.Main); }
+            y += 62f + 26f;
+            UI.Fill(new Rect(m, y, w, 1f), UI.Line);
+            y += 14f;
+            string[] tert = { "TUTORIAL", "OPÇÕES", "CONTROLES", "CRÉDITOS", "SAIR" };
+            for (int i = 0; i < tert.Length; i++)
+                if (UI.Button(new Rect(m, y + i * 48f, 300f, 46f), tert[i], UI.Kind.Ghost, 22)) Tertiary(i);
+            UI.Label(new Rect(m, vh - 56f, 600f, 28f), "v0.3", UI.Body, 15, UI.Dim, TextAnchor.MiddleLeft);
         }
-        if (Button(x, y + gap, w, h, "CAMPANHA  (NOVO)")) { Net cn = Net.Ensure(); if (cn.loggedIn && !cn.connected) cn.Connect(); Game.I.StartCampaign(); }
-        if (Button(x, y + gap * 2f, w, h, "TREINO CONTRA BOTS")) Goto(Page.Setup, Page.Main);
-        if (Button(x, y + gap * 3f, w, h, "AGENTES")) Goto(Page.Agents, Page.Main);
-        if (Button(x, y + gap * 4f, w, h, "LOJA")) { OpenShopNet(); Goto(Page.Shop, Page.Main); }
-        if (Button(x, y + gap * 5f, w, h, "TUTORIAL")) Game.I.StartMatch(true);
-        if (Button(x, y + gap * 6f, w, h, "OPCOES")) Goto(Page.Options, Page.Main);
-        if (Button(x, y + gap * 7f, w, h, "CONTROLES")) Goto(Page.Controls, Page.Main);
-        if (Button(x, y + gap * 8f, w, h, "CREDITOS")) Goto(Page.Credits, Page.Main);
-        if (Button(x, y + gap * 9f, w, h, "SAIR")) Quit();
-        Game.Text(x, vh - 70f, 600f, 30f, "v0.3  -  prototipo", 16, new Color(1f, 1f, 1f, 0.4f), TextAnchor.MiddleLeft);
-        if (MenuVideo.Tex == null) AgentCard(Screen.width / (Screen.height / 1080f), vh);   // com o video, so o menu
+        else
+        {
+            float y = 200f, w = Mathf.Min(1150f, vw * 0.52f);
+            if (UI.Button(new Rect(m, y, w, 150f), "JOGAR ONLINE", UI.Kind.Primary, 62)) PlayOnline(ref n);
+            y += 166f;
+            float hw = (w - 16f) / 2f, bh = 128f;
+            if (UI.Button(new Rect(m, y, hw, bh), "CAMPANHA", UI.Kind.Normal, 50)) StartCampaignBtn();
+            if (UI.Button(new Rect(m + hw + 16f, y, hw, bh), "TREINO", UI.Kind.Normal, 50)) Goto(Page.Setup, Page.Main);
+            y += bh + 16f;
+            if (UI.Button(new Rect(m, y, hw, bh), "AGENTES", UI.Kind.Normal, 50)) Goto(Page.Agents, Page.Main);
+            if (UI.Button(new Rect(m + hw + 16f, y, hw, bh), "LOJA", UI.Kind.Normal, 50)) { OpenShopNet(); Goto(Page.Shop, Page.Main); }
+            y += bh + 32f;
+            string[] tert = { "TUTORIAL", "OPÇÕES", "CONTROLES", "CRÉDITOS", "SAIR" };
+            float tw = (w - 4f * 14f) / 5f;
+            for (int i = 0; i < tert.Length; i++)
+                if (UI.Button(new Rect(m + i * (tw + 14f), y, tw, 118f), tert[i], UI.Kind.Normal, 30, true, null, null, TextAnchor.MiddleCenter)) Tertiary(i);
+        }
+
+        // Agente em destaque (o modelo 3D fica na cena; aqui so o nome)
+        AgentDef d = AgentBody.Defs[Settings.agent % AgentBody.Defs.Length];
+        float bx = vw - m, by = vh - (phone ? 60f : 80f);
+        if (!phone) UI.Label(new Rect(bx - 600f, by - 118f, 600f, 24f), "AGENTE SELECIONADO", UI.Body, 15, UI.Muted, TextAnchor.MiddleRight);
+        UI.Label(new Rect(bx - 900f, by - 96f * (phone ? 1.4f : 1f), 900f, 70f * (phone ? 1.4f : 1f)), d.name.ToUpperInvariant(), UI.HeadBold, phone ? 84 : 60, UI.Text, TextAnchor.MiddleRight);
+        string role = d.role.ToUpperInvariant();
+        UI.Label(new Rect(bx - 900f, by - 28f, 900f, 32f * (phone ? 1.4f : 1f)), role, UI.Body, phone ? 30 : 19, UI.Text2, TextAnchor.MiddleRight);
+    }
+
+    void PlayOnline(ref Net n)
+    {
+        n = Net.Ensure();
+        if (n.loggedIn) { n.Connect(); Goto(Page.Online, Page.Main); } else Goto(Page.Login, Page.Main);
+    }
+
+    void StartCampaignBtn()
+    {
+        Net cn = Net.Ensure();
+        if (cn.loggedIn && !cn.connected) cn.Connect();
+        Game.I.StartCampaign();
+    }
+
+    void Tertiary(int i)
+    {
+        if (i == 0) Game.I.StartMatch(true);
+        else if (i == 1) Goto(Page.Options, Page.Main);
+        else if (i == 2) Goto(Page.Controls, Page.Main);
+        else if (i == 3) Goto(Page.Credits, Page.Main);
+        else Quit();
+    }
+
+    // Bloco compacto do perfil: iniciais, nome, nivel/patente, barra de XP e SHOTS. right = borda direita.
+    void ProfileChip(float right, float y, bool phone)
+    {
+        float k = phone ? 1.7f : 1f;
+        float w = (phone ? 330f : 470f) * k * (phone ? 0.75f : 1f), h = 80f * k;
+        float x = right - w;
+        UI.PanelBox(new Rect(x, y, w, h), 0.85f);
+        Net n = Net.I;
+        string name = n != null && !string.IsNullOrEmpty(n.userName) ? n.userName.ToUpperInvariant() : "JOGADOR";
+        float px = x + 16f * k;
+        if (!phone)
+        {
+            Rect av = new Rect(px, y + 16f, 48f, 48f);
+            UI.Fill(av, UI.Raised); UI.Border(av, UI.LineHi);
+            UI.Label(av, name.Length > 1 ? name.Substring(0, 2) : name, UI.HeadBold, 22, UI.Text, TextAnchor.MiddleCenter);
+            px += 64f;
+        }
+        float coinW = 120f * k;
+        float iw = x + w - coinW - px - 16f * k;
+        UI.Label(new Rect(px, y + 10f * k, iw, 30f * k), name, UI.Head, Mathf.RoundToInt(22f * k), UI.Text, TextAnchor.MiddleLeft);
+        UI.Label(new Rect(px, y + 10f * k, iw, 30f * k), "NÍV. " + Skins.Level + (phone ? "" : "  ·  " + Skins.Rank.ToUpperInvariant()), UI.Body, Mathf.RoundToInt(13f * k), UI.Muted, TextAnchor.MiddleRight);
+        float xp = Mathf.Clamp01(Skins.LevelXp / (float)Mathf.Max(1, Skins.LevelNeed));
+        UI.Fill(new Rect(px, y + 46f * k, iw, 4f * k), UI.Line);
+        UI.Fill(new Rect(px, y + 46f * k, iw * xp, 4f * k), UI.Text2);
+        if (!phone) UI.Label(new Rect(px, y + 54f, iw, 20f), Skins.LevelXp + " / " + Skins.LevelNeed + " XP", UI.Body, 12, UI.Muted, TextAnchor.MiddleLeft);
+        float dx = x + w - coinW - 6f * k;
+        UI.Fill(new Rect(dx, y + 18f * k, 1f, h - 36f * k), UI.Line);
+        UI.Label(new Rect(dx, y + 12f * k, coinW - 10f * k, 22f * k), Skins.Coin, UI.Body, Mathf.RoundToInt(12f * k), UI.Muted, TextAnchor.MiddleRight);
+        string coins = Num(Skins.Coins);
+        UI.Label(new Rect(dx, y + 32f * k, coinW - 10f * k, 34f * k), coins, UI.Head, Mathf.RoundToInt(26f * k), UI.Text, TextAnchor.MiddleRight);
+        UI.Diamond(dx + coinW - 18f * k - coins.Length * 12f * k, y + 49f * k, 11f * k, UI.Yellow);
     }
 
     // Ficha do agente selecionado, no canto inferior direito (o modelo 3D fica ao lado, na cena).
@@ -739,7 +828,28 @@ public class Menus : MonoBehaviour
     void DrawControls(float x)
     {
         Title(x, 90f, "CONTROLES", null);
-        string[,] rows =
+        bool tac = PlayerController.TacticalMode;
+        string[,] rows = tac ? new string[,]
+        {
+            { "W A S D", "Mover" },
+            { "MOUSE", "Olhar" },
+            { "SHIFT", "Correr (atirar logo depois tem um pequeno atraso)" },
+            { "ESPACO", "Pular" },
+            { "MOUSE ESQ.", "Atirar" },
+            { "MOUSE DIR.", "Mirar" },
+            { "R", "Recarregar" },
+            { "1  2  3  4  /  SCROLL", "Trocar de arma" },
+            { "F", "Veiculo / caixa / bomba (segurar)" },
+            { "ESPACO (no ar)", "Jetpack, se tiver pego" },
+            { "SHIFT na luneta", "Prender o folego" },
+            { "Q", "Habilidade / granada" },
+            { "X", "Sobrecarga (carrega com abates)" },
+            { "CTRL  /  C", "Agachar (segurar)  /  agachar (liga e desliga)" },
+            { "V  (SEGURAR)", "Falar com o time (salas online)" },
+            { "Z  /  BOTAO DO MEIO", "Marcar para o time (inimigo, vida...)" },
+            { "TAB", "Placar" },
+            { "ESC", "Pausar" }
+        } : new string[,]
         {
             { "W A S D", "Mover" },
             { "MOUSE", "Olhar" },
