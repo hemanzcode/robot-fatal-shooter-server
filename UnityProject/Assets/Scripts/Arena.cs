@@ -25,22 +25,24 @@ public static partial class Arena
     static int[] CellOf(float x, float z) { int cx, cy; ToCell(new Vector3(x, 0f, z), out cx, out cy); return new[] { cx, cy }; }
 
     // NO GELO: corredores de uma celula, muitos trechos cobertos ('T'), portoes 'G' (abrem e fecham),
+    // (26/11: colunas de gelo saíram da frente das entradas do subterraneo e do corredor central dos tuneis;
+    //  agora ficam nas pracas ao lado dos tuneis do norte/sul. Os caixotes do corredor central foram para (8,8).)
     // escadas 'S' para os tetos, entradas 'U' para o subterraneo e colunas de gelo 'o'.
     static readonly string[] iceHalf =
     {
         "#########################",
         "#A.A.#......T......#..P.#",
-        "#....G.###..T..###.#....#",
+        "#....G.###o.T.o###.#....#",
         "#A.A.#.#S.......S#.G.x..#",
-        "##G###.#..x.o.x..#.###.##",
+        "##G###.#..x...x..#.###.##",
         "#....T.###.#U#.###.T....#",
         "#.##.#.....#.#.....#.##.#",
         "#.#S.G.x.###.###.x.G.S#.#",
-        "#.#..#.....T.T.....#..#.#",
+        "#.#..#..x..T.T.....#..#.#",
         "#U#.####.#.....#.####.#.#",
         "#...T..S.#.x.x.#.S..T...#",
         "####.#####G###G#####.####",
-        "#P...x...T..o..T...x...P#"
+        "#P.......T.....T.......P#"
     };
     static readonly int[][] IceSewerHalf =
     {

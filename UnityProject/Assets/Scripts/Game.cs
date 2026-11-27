@@ -73,17 +73,22 @@ public class Game : MonoBehaviour
         gameObject.AddComponent<TouchPad>();
         gameObject.AddComponent<DamagePopups>();
         gameObject.AddComponent<Ping>();
+        PerfHud.Init();   // painel de medicao: so com ?debug=1 (ou F9 no Editor)
 #if UNITY_WEBGL && !UNITY_EDITOR
         RfsAudioSetup();
 #endif
         useGUILayout = false;
         if (TouchPad.On) MobileProfile();
+#if UNITY_WEBGL && !UNITY_EDITOR
+        else if ((Application.absoluteURL ?? "").Contains("capteste")) RfsFrameCap(60);   // teste do limite de FPS no PC
+#endif
 #if UNITY_EDITOR
         try { System.IO.Directory.CreateDirectory("Logs"); System.IO.File.WriteAllText("Logs/runtime.txt", "PLAY " + System.DateTime.Now.ToString("HH:mm:ss") + "\n"); } catch (System.Exception) { }
         Application.logMessageReceived += OnLog;
 #endif
         if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Greybox_CombatTest")
         {
+            greybox = true;
             Settings.Load();
             Settings.Apply();
             Sfx.Warm(); Fx.Warm();
@@ -136,7 +141,7 @@ public class Game : MonoBehaviour
         SetupCamera(menuCam);
         menuCam.fieldOfView = 60f;
         menuEar = mc.AddComponent<AudioListener>();
-        MenuVideo.Attach(menuCam);
+        // MenuVideo.Attach(menuCam);   // identidade nova: o menu mostra a cena do jogo + agente (o video fica guardado)
         VoiceChat.Ensure();          // voz do time nas salas online (versao Web)   // video promocional em tela cheia atras do menu
         Sfx.Warm(); Fx.Warm();       // gravacoes dos tiros e texturas de sangue prontas antes do primeiro disparo
 
@@ -266,6 +271,7 @@ public class Game : MonoBehaviour
         int keep = Arena.mapId < 0 ? 0 : Arena.mapId;
         string[] files = { "mercado", "gelo", "casa" };
         RenderTexture rt = new RenderTexture(1280, 720, 24, RenderTextureFormat.ARGB32);
+        MenuBackdrop.Release(menuCam);   // a foto do mapa precisa da camera desenhando tudo
         Transform agent = menuAgent != null ? menuAgent.transform.parent : null;
         if (agent != null) agent.gameObject.SetActive(false);
         string dir = Application.dataPath + "/Resources/MapPreviews";
@@ -299,6 +305,7 @@ public class Game : MonoBehaviour
         if (agent != null) agent.gameObject.SetActive(true);
         LoadMap(keep);
         Debug.Log("Previews dos mapas salvos em Resources/MapPreviews");
+        MenuBackdrop.Invalidate();
     }
 #endif
 
@@ -435,12 +442,19 @@ public class Game : MonoBehaviour
     public void Announce(string text, Color c) { AddFeed(text, c); }
 
     // Celular: tudo o que pesa por pixel ou por quadro e desligado ou reduzido.
+#if UNITY_WEBGL && !UNITY_EDITOR
+    [System.Runtime.InteropServices.DllImport("__Internal")] static extern void RfsFrameCap(int maxFps);
+#endif
     static void MobileProfile()
     {
         // No navegador, -1 usa o requestAnimationFrame da propria tela (60 Hz estavel);
         // um numero fixo faz a Unity usar setTimeout e o quadro fica irregular.
         Application.targetFrameRate = -1;
         QualitySettings.vSyncCount = 0;
+#if UNITY_WEBGL && !UNITY_EDITOR
+        // Telas de 90/120 Hz: desenha a cada 2 atualizacoes (60 FPS). Em tela de 60 Hz nao muda nada.
+        RfsFrameCap(60);
+#endif
         Time.fixedDeltaTime = 1f / 30f;
         Post.Lite = true;
         Fx.Scale = 0.35f;
@@ -456,6 +470,7 @@ public class Game : MonoBehaviour
         urp.renderScale = 0.85f;
         urp.msaaSampleCount = 1;
         urp.shadowDistance = 18f;
+        urp.mainLightShadowmapResolution = 1024;   // 4096 e para PC; com 18 m de sombra, 1024 mantem o detalhe
         urp.shadowCascadeCount = 1;
         urp.maxAdditionalLightsCount = 2;
         urp.supportsHDR = false;
@@ -632,8 +647,11 @@ public class Game : MonoBehaviour
         a.Respawn(best, a.team == 0 ? 0f : 180f);
     }
 
+    bool greybox;   // cena de teste Greybox_CombatTest: sem musica, chuva nem logica de partida
+
     void Update()
     {
+        if (greybox) return;
         music.volume = 0.24f * Settings.music;
         // Musica para quando o jogo esta pausado (menu de pausa/opcoes durante a partida).
         bool hold = state != State.Menu && menus != null && menus.IsOpen;
@@ -646,10 +664,13 @@ public class Game : MonoBehaviour
 
         if (state == State.Menu)
         {
-            float t = Time.unscaledTime * 0.05f;
-            menuCam.transform.position = new Vector3(Mathf.Cos(t) * 34f, 15f + Mathf.Sin(t * 1.7f) * 2f, Mathf.Sin(t) * 34f);
-            menuCam.transform.rotation = Quaternion.LookRotation(new Vector3(0f, 3f, 0f) - menuCam.transform.position);
+            // Fundo cinematografico: a cidade e fotografada uma vez; por quadro so o agente, a poeira e a fumaca.
+            if (!menuCam.enabled) menuCam.enabled = true;
+#if UNITY_EDITOR
+            if (Input.GetKeyDown(KeyCode.F7)) TouchPad.On = !TouchPad.On;   // editor: ver o menu no layout de celular
+#endif
             UpdateMenuAgent();
+            MenuBackdrop.Tick(menuCam, menuAgent != null ? menuAgent.transform.parent : null);
             return;
         }
         if (matchOver) return;
@@ -787,6 +808,10 @@ public class Game : MonoBehaviour
 
     // ------------------------------- Desenho (IMGUI) -------------------------------
 
+    // Os menus trocam a fonte e tiram a sombra enquanto desenham (identidade nova); o HUD continua igual.
+    public static Font textFont;
+    public static bool textShadow = true;
+
     public static void EnsureStyle()
     {
         if (style != null) return;
@@ -798,7 +823,7 @@ public class Game : MonoBehaviour
 
     public static void Fill(float x, float y, float w, float h, Color c)
     {
-        GUI.color = c;
+        GUI.color = textFont != null ? UI.Fix(c) : c;   // nos menus: cor certa no navegador
         GUI.DrawTexture(new Rect(x, y, w, h), Texture2D.whiteTexture);
         GUI.color = Color.white;
     }
@@ -806,10 +831,16 @@ public class Game : MonoBehaviour
     public static void Text(float x, float y, float w, float h, string s, int size, Color c, TextAnchor anchor)
     {
         EnsureStyle();
+        if (textFont != null) c = UI.Fix(c);
+        style.font = textFont;
+        style.fontStyle = textFont == null ? FontStyle.Bold : FontStyle.Normal;
         style.fontSize = size;
         style.alignment = anchor;
-        style.normal.textColor = new Color(0f, 0f, 0f, c.a * 0.8f);
-        GUI.Label(new Rect(x + 2f, y + 2f, w, h), s, style);
+        if (textShadow)
+        {
+            style.normal.textColor = new Color(0f, 0f, 0f, c.a * 0.8f);
+            GUI.Label(new Rect(x + 2f, y + 2f, w, h), s, style);
+        }
         style.normal.textColor = c;
         GUI.Label(new Rect(x, y, w, h), s, style);
     }
@@ -1032,15 +1063,18 @@ public class Game : MonoBehaviour
         // Habilidades (no celular a recarga ja aparece nos proprios botoes E, Q e X)
         if (!TouchPad.On)
         {
-            bool hasSecondary = AgentAbilities.HasSecondarySkill(player.agent);
-            float abilityCount = hasSecondary ? 4f : 3f;
+            // Modo tatico: sem dash (E) e sem utilidade secundaria (C).
+            bool tac = PlayerController.TacticalMode;
+            bool hasDash = !tac;
+            bool hasSecondary = !tac && AgentAbilities.HasSecondarySkill(player.agent);
+            float abilityCount = 2f + (hasDash ? 1f : 0f) + (hasSecondary ? 1f : 0f);
             float ax = cx - (abilityCount * 120f + (abilityCount - 1f) * 15f) * 0.5f, ay = vh - 92f;
-            Ability(ax, ay, "E", "DASH", 1f - Mathf.Clamp01((pc.dashReady - Time.time) / PlayerController.DashCooldown), Art.Cyan);
+            if (hasDash) { Ability(ax, ay, "E", "DASH", 1f - Mathf.Clamp01((pc.dashReady - Time.time) / PlayerController.DashCooldown), Art.Cyan); ax += 135f; }
             AgentDef agentDef = AgentBody.Defs[Mathf.Abs(player.agent) % AgentBody.Defs.Length];
-            Ability(ax + 135f, ay, "Q", AgentAbilities.HasCustomSkill(player.agent) ? "PODER" : "GRANADA", 1f - Mathf.Clamp01((pc.nadeReady - Time.time) / PlayerController.NadeCooldown), Art.Green);
-            if (hasSecondary) Ability(ax + 270f, ay, "C", "UTILIDADE", 1f - Mathf.Clamp01((pc.secondaryReady - Time.time) / PlayerController.SecondaryCooldown), Art.Orange);
-            Ability(ax + (hasSecondary ? 405f : 270f), ay, "X", "ULTIMATE", pc.ult / 100f, Art.Yellow);
-            if (AgentAbilities.HasCustomSkill(player.agent)) Text(40f, vh - 190f, 760f, 34f, agentDef.skill + (agentDef.skill2.Length > 0 ? "  /  C: " + agentDef.skill2 : "") + "  /  X: " + agentDef.ultimate, 16, agentDef.accent, TextAnchor.MiddleLeft);
+            Ability(ax, ay, "Q", AgentAbilities.HasCustomSkill(player.agent) ? "PODER" : "GRANADA", 1f - Mathf.Clamp01((pc.nadeReady - Time.time) / PlayerController.NadeCooldown), Art.Green); ax += 135f;
+            if (hasSecondary) { Ability(ax, ay, "C", "UTILIDADE", 1f - Mathf.Clamp01((pc.secondaryReady - Time.time) / PlayerController.SecondaryCooldown), Art.Orange); ax += 135f; }
+            Ability(ax, ay, "X", "ULTIMATE", pc.ult / 100f, Art.Yellow);
+            if (AgentAbilities.HasCustomSkill(player.agent)) Text(40f, vh - 190f, 760f, 34f, agentDef.skill + (hasSecondary && agentDef.skill2.Length > 0 ? "  /  C: " + agentDef.skill2 : "") + "  /  X: " + agentDef.ultimate, 16, agentDef.accent, TextAnchor.MiddleLeft);
         }
         }
 

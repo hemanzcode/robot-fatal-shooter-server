@@ -318,6 +318,15 @@ public class TouchPad : MonoBehaviour
     }
 
     // Toque dentro do circulo (com 12% de folga, para nao errar o botao na borda).
+    // Botoes que nao aparecem agora: voz fora do online; no modo tatico nao ha dash nem utilidade C.
+    static bool Hidden(Btn b)
+    {
+        if (b.id == "talk") return !VoiceChat.Active;
+        if (b.id == "dash") return PlayerController.TacticalMode;
+        if (b.id == "secondary") return PlayerController.TacticalMode || Game.I == null || Game.I.player == null || !AgentAbilities.HasSecondarySkill(Game.I.player.agent);
+        return false;
+    }
+
     static bool InButton(Btn b, Vector2 p)
     {
         Rect r = RectOf(b);
@@ -369,7 +378,7 @@ public class TouchPad : MonoBehaviour
                 // Pular etapa do tutorial
                 if (SkipRect(vw).Contains(p) && Game.I.tutorial != null) { Game.I.tutorial.SkipStep(); continue; }
                 string hit = null;
-                for (int b = 0; b < Buttons.Length; b++) if ((Buttons[b].id != "talk" || VoiceChat.Active) && InButton(Buttons[b], p)) { hit = Buttons[b].id; break; }
+                for (int b = 0; b < Buttons.Length; b++) if (!Hidden(Buttons[b]) && InButton(Buttons[b], p)) { hit = Buttons[b].id; break; }
                 if (hit == "fire") { fireId = t.fingerId; FireDown = true; }
                 else if (hit == "aim") { if (Settings.aimHold) aimId = t.fingerId; else aimToggle = !aimToggle; }
                 else if (hit == "jump") { jumpId = t.fingerId; JumpDown = true; }
@@ -458,8 +467,7 @@ public class TouchPad : MonoBehaviour
         for (int i = 0; i < Buttons.Length; i++)
         {
             Btn b = Buttons[i];
-            if (b.id == "talk" && !VoiceChat.Active) continue;
-            if (b.id == "secondary" && (Game.I.player == null || !AgentAbilities.HasSecondarySkill(Game.I.player.agent))) continue;
+            if (Hidden(b)) continue;
             bool on = (b.id == "talk" && Talk) || (b.id == "fire" && Fire) || (b.id == "aim" && Aim) || (b.id == "jump" && Jump) || (b.id == "use" && Use) || (b.id == "down" && (veh ? Down : Crouch)) || (b.id == "dash" && DashDown) || (b.id == "nade" && GrenadeDown) || (b.id == "secondary" && SecondaryDown) || (b.id == "ult" && UltDown);
             if (b.id == "down") b.label = veh ? "DESCE" : "AGACHAR";
             DrawBtn(b, on, false);

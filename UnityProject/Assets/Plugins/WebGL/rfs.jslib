@@ -217,5 +217,38 @@ mergeInto(LibraryManager.library, {
     try { if (V.ctx) V.ctx.close(); } catch (e) { }
     window.__rv = null;
   },
+  // Limite de FPS no celular sem trocar o relogio do navegador: mede a taxa da tela e, se passar do limite,
+  // pede ao laco principal para desenhar a cada N atualizacoes (120 Hz -> a cada 2 = 60 FPS). Reavalia a cada 2 s
+  // (a tela pode alternar entre 60 e 120 Hz). Teste no PC: ?debug=1&capteste forca N=2.
+  RfsFrameCap__deps: ['emscripten_set_main_loop_timing'],
+  RfsFrameCap: function (maxFps) {
+    if (window.__rfsCap) return;
+    var C = window.__rfsCap = { d: [], hz: 60, n: 1 };
+    var last = performance.now();
+    var tick = function (t) { var dt = t - last; last = t; if (dt > 2 && dt < 100) { C.d.push(dt); if (C.d.length > 120) C.d.shift(); } requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+    var force = /capteste/.test(location.search);
+    setInterval(function () {
+      if (C.d.length < 30) return;
+      var s = C.d.slice().sort(function (a, b) { return a - b; });
+      C.hz = 1000 / s[s.length >> 1];
+      var n = force ? 2 : Math.max(1, Math.round(C.hz / maxFps));
+      var cur = (typeof MainLoop !== 'undefined') ? MainLoop.timingValue : -1;
+      if (n !== C.n || (typeof MainLoop !== 'undefined' && MainLoop.timingMode === 1 && cur !== n)) {
+        C.n = n;
+        try { _emscripten_set_main_loop_timing(1, n); } catch (e) { }
+      }
+    }, 2000);
+  },
+  // Painel de debug (?debug=1): 0 heap wasm MB, 1 heap JS MB (Chrome), 2 devicePixelRatio da tela, 3 dpr usado pela Unity.
+  RfsDebugInfo: function (k) {
+    if (k === 0) return (typeof HEAP8 !== 'undefined' ? HEAP8.length : (Module.HEAP8 ? Module.HEAP8.length : 0)) / 1048576;
+    if (k === 1) return (performance && performance.memory) ? performance.memory.usedJSHeapSize / 1048576 : 0;
+    if (k === 2) return window.devicePixelRatio || 1;
+    if (k === 3) return Module.devicePixelRatio || window.devicePixelRatio || 1;
+    if (k === 4) return window.__rfsCap ? window.__rfsCap.hz : 0;
+    if (k === 5) return window.__rfsCap ? window.__rfsCap.n : 0;
+    return 0;
+  },
   RfsIsMobile: function () { return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ? 1 : 0; }
 });
