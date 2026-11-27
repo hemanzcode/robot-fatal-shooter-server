@@ -26,7 +26,7 @@ public static class NeonArenaSetup
                 EditorSceneManager.SaveScene(scene, ScenePath);
                 AssetDatabase.Refresh();
             }
-            if (PlayerSettings.productName != "Robot Fatal Shooter") PlayerSettings.productName = "Robot Fatal Shooter";
+            if (PlayerSettings.productName != "Fatal Shooter") PlayerSettings.productName = "Fatal Shooter";
             // Uma vez por projeto: reimporta modelos e texturas ja com as regras de importacao compiladas.
             string key = "rfs_reimport_" + Application.dataPath;
             if (EditorPrefs.GetInt(key, 0) != 1)

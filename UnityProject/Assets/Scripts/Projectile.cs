@@ -12,6 +12,7 @@ public class Projectile : MonoBehaviour
     public Color color = Color.white;
     float age;
     Vector3 lastTrail;
+    bool flybyPlayed;
 
     void Start() { lastTrail = transform.position; }
 
@@ -61,10 +62,22 @@ public class Projectile : MonoBehaviour
                 return;
             }
         }
+        Vector3 prevPos = transform.position;
         transform.position += step;
+        if (!flybyPlayed) flybyPlayed = Combat.TryBulletFlyby(owner, prevPos, transform.position, false);
         if (gravity > 0.01f) transform.Rotate(540f * dt, 180f * dt, 0f, Space.Self);
         else if (vel.sqrMagnitude > 0.01f) transform.rotation = Quaternion.LookRotation(vel);
-        if ((transform.position - lastTrail).sqrMagnitude > 1.5f)
+        // Rastro: plasma vira descarga eletrica; bazuca nao deixa feixe (so o foguete e a luz).
+        if (weapon == "BAZUCA") lastTrail = transform.position;
+        else if (weapon == "PLASMA")
+        {
+            if ((transform.position - lastTrail).sqrMagnitude > 2.2f)
+            {
+                Fx.Arc(lastTrail, transform.position, color, 0.16f);
+                lastTrail = transform.position;
+            }
+        }
+        else if ((transform.position - lastTrail).sqrMagnitude > 1.5f)
         {
             Fx.Tracer(lastTrail, transform.position, color, 0.08f, 0.25f);
             lastTrail = transform.position;

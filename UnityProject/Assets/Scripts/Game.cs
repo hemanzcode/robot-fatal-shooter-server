@@ -22,6 +22,7 @@ public class Game : MonoBehaviour
     public Tutorial tutorial;
     public bool roundMode;          // modo bomba: rodadas sem renascer
     public BombMode bomb;
+    public Campaign campaign;
     float nextCrate;
 
     struct Feed { public string text; public Color color; public float time; }
@@ -32,6 +33,8 @@ public class Game : MonoBehaviour
     float bannerTime = -99f;
     static GUIStyle style;
     AudioSource music, rainAudio;
+    Light sunLight;
+    float fogClock, fogWarned = -1f;
     ParticleSystem rain;
     Camera menuCam;
     AgentBody menuAgent;
@@ -79,6 +82,17 @@ public class Game : MonoBehaviour
         try { System.IO.Directory.CreateDirectory("Logs"); System.IO.File.WriteAllText("Logs/runtime.txt", "PLAY " + System.DateTime.Now.ToString("HH:mm:ss") + "\n"); } catch (System.Exception) { }
         Application.logMessageReceived += OnLog;
 #endif
+        if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name == "Greybox_CombatTest")
+        {
+            Settings.Load();
+            Settings.Apply();
+            Sfx.Warm(); Fx.Warm();
+            menus = gameObject.AddComponent<Menus>();
+            state = State.Playing;
+            scoreLimit = 9999;
+            timeLeft = 99999f;
+            return;
+        }
 
         // Desliga cameras, luzes e ouvintes que ja existam na cena.
         foreach (Camera c in All<Camera>()) c.gameObject.SetActive(false);
@@ -99,6 +113,7 @@ public class Game : MonoBehaviour
         sun.transform.SetParent(transform, false);
         sun.transform.rotation = Quaternion.Euler(46f, 38f, 0f);
         Light sl = sun.AddComponent<Light>();
+        sunLight = sl;
         sl.type = LightType.Directional;
         sl.color = new Color(1f, 0.94f, 0.82f);
         sl.intensity = 1.6f;
@@ -112,7 +127,7 @@ public class Game : MonoBehaviour
         GameObject w = new GameObject("World");
         w.transform.SetParent(transform, false);
         world = w.transform;
-        Arena.Build(world);
+        Arena.Build(world, 0);
         Post.Probe(transform, new Vector3(Arena.W * Arena.Cell, 40f, Arena.H * Arena.Cell));
 
         GameObject mc = new GameObject("MenuCamera");
@@ -123,6 +138,7 @@ public class Game : MonoBehaviour
         menuEar = mc.AddComponent<AudioListener>();
         MenuVideo.Attach(menuCam);
         VoiceChat.Ensure();          // voz do time nas salas online (versao Web)   // video promocional em tela cheia atras do menu
+        Sfx.Warm(); Fx.Warm();       // gravacoes dos tiros e texturas de sangue prontas antes do primeiro disparo
 
         BuildRain();
 
@@ -131,13 +147,17 @@ public class Game : MonoBehaviour
         music.loop = true;
         music.spatialBlend = 0f;
         music.pitch = 1f;
+        music.volume = 0.24f * Settings.music;
         music.Play();
 
         rainAudio = gameObject.AddComponent<AudioSource>();
         rainAudio.clip = Sfx.Get("rain");
         rainAudio.loop = true;
         rainAudio.spatialBlend = 0f;
+        rainAudio.volume = Settings.rain ? 0.2f * Settings.sfx : 0f;
         rainAudio.Play();
+
+        Sfx.UI("startup", 0.65f);
 
         menus = gameObject.AddComponent<Menus>();
         menus.Open(Menus.Page.Main);
@@ -222,9 +242,119 @@ public class Game : MonoBehaviour
 
     // ------------------------------- Partidas -------------------------------
 
+    // Troca o mapa (refaz o cenario so quando muda) e o clima de cada um.
+    public void LoadMap(int id)
+    {
+        if (Arena.mapId != id)
+        {
+            // Desliga na hora (colisores somem ja) e apaga no fim do quadro.
+            for (int i = world.childCount - 1; i >= 0; i--) { GameObject old = world.GetChild(i).gameObject; old.SetActive(false); Destroy(old); }
+            world.DetachChildren();
+            Arena.Build(world, id);
+            Post.ProbeSize(new Vector3(Arena.W * Arena.Cell, 40f, Arena.H * Arena.Cell));
+        }
+        Gate.ResetAll();
+        Breakable.ResetAll();
+        MapLook();
+        fogClock = 0f; fogWarned = -1f;
+    }
+
+#if UNITY_EDITOR
+    // Ferramenta (so no editor, durante o Play): fotografa os dois mapas do alto para as imagens de preview do menu.
+    public System.Collections.IEnumerator CapturePreviews()
+    {
+        int keep = Arena.mapId < 0 ? 0 : Arena.mapId;
+        string[] files = { "mercado", "gelo", "casa" };
+        RenderTexture rt = new RenderTexture(1280, 720, 24, RenderTextureFormat.ARGB32);
+        Transform agent = menuAgent != null ? menuAgent.transform.parent : null;
+        if (agent != null) agent.gameObject.SetActive(false);
+        string dir = Application.dataPath + "/Resources/MapPreviews";
+        System.IO.Directory.CreateDirectory(dir);
+        for (int id = 0; id < 3; id++)
+        {
+            LoadMap(id);
+            for (int f = 0; f < 3; f++) yield return null;
+            yield return new WaitForSecondsRealtime(0.6f);
+            RenderSettings.fogDensity = id == 1 ? 0.006f : 0.003f;
+            Vector3 pos = id == 0 ? new Vector3(-46f, 36f, -58f) : (id == 1 ? new Vector3(-44f, 40f, -56f) : new Vector3(-27f, 26f, 30f));
+            Camera c = menuCam;
+            float fov = c.fieldOfView;
+            c.transform.position = pos;
+            c.transform.rotation = Quaternion.LookRotation((id == 2 ? new Vector3(2f, 0f, -2f) : new Vector3(3f, 0f, 6f)) - pos);
+            c.fieldOfView = 52f;
+            RenderTexture old = c.targetTexture;
+            c.targetTexture = rt;
+            c.Render();
+            c.targetTexture = old;
+            c.fieldOfView = fov;
+            RenderTexture.active = rt;
+            Texture2D t = new Texture2D(1280, 720, TextureFormat.RGB24, false);
+            t.ReadPixels(new Rect(0, 0, 1280, 720), 0, 0);
+            t.Apply();
+            RenderTexture.active = null;
+            System.IO.File.WriteAllBytes(dir + "/" + files[id] + ".png", t.EncodeToPNG());
+            Destroy(t);
+        }
+        rt.Release();
+        if (agent != null) agent.gameObject.SetActive(true);
+        LoadMap(keep);
+        Debug.Log("Previews dos mapas salvos em Resources/MapPreviews");
+    }
+#endif
+
+    // MERCADO: tarde quente e seca. NO GELO: ceu encoberto, luz fria, neve caindo e neblina leve.
+    void MapLook()
+    {
+        bool ice = Arena.Ice;
+        RenderSettings.fogColor = ice ? new Color(0.78f, 0.84f, 0.9f) : new Color(0.78f, 0.7f, 0.58f);
+        RenderSettings.fogDensity = ice ? IceFogBase : 0.0045f;
+        if (sunLight != null)
+        {
+            sunLight.transform.rotation = ice ? Quaternion.Euler(34f, 150f, 0f) : Quaternion.Euler(46f, 38f, 0f);
+            sunLight.color = ice ? new Color(0.86f, 0.92f, 1f) : new Color(1f, 0.94f, 0.82f);
+            sunLight.intensity = ice ? 1.15f : 1.6f;
+        }
+        Post.Sky(ice);
+        if (rain != null)
+        {
+            // Mesmo sistema da chuva: no gelo vira neve (flocos grandes caindo devagar e de lado).
+            ParticleSystem.MainModule main = rain.main;
+            main.startLifetime = ice ? 4.5f : 0.8f;
+            main.startSize = ice ? new ParticleSystem.MinMaxCurve(0.04f, 0.09f) : new ParticleSystem.MinMaxCurve(0.028f);
+            main.startColor = ice ? new Color(1f, 1f, 1f, 0.85f) : new Color(0.72f, 0.8f, 1f, 0.3f);
+            ParticleSystem.EmissionModule em = rain.emission;
+            em.rateOverTime = ice ? 900f : 3600f;
+            ParticleSystem.VelocityOverLifetimeModule vel = rain.velocityOverLifetime;
+            vel.x = ice ? new ParticleSystem.MinMaxCurve(-1.5f, 1.2f) : new ParticleSystem.MinMaxCurve(-2.5f);
+            vel.y = ice ? new ParticleSystem.MinMaxCurve(-2.6f, -1.6f) : new ParticleSystem.MinMaxCurve(-30f);
+            vel.z = ice ? new ParticleSystem.MinMaxCurve(-0.8f, 1.4f) : new ParticleSystem.MinMaxCurve(1f);
+            ParticleSystemRenderer pr = rain.GetComponent<ParticleSystemRenderer>();
+            pr.renderMode = ice ? ParticleSystemRenderMode.Billboard : ParticleSystemRenderMode.Stretch;
+            rain.Clear();
+        }
+    }
+
+    // Nevoa do NO GELO: a cada 40 s um banco de neblina passa por ~13 s (sobe, segura e baixa).
+    const float IceFogBase = 0.016f, IceFogPeak = 0.075f, FogEvery = 40f;
+    void UpdateIceFog()
+    {
+        if (!Arena.Ice) return;
+        bool playing = state == State.Playing || state == State.Tutorial;
+        if (playing) fogClock += Time.deltaTime;
+        float t = Mathf.Repeat(fogClock, FogEvery) - (FogEvery - 13f);   // os ultimos 13 s de cada ciclo
+        float k = 0f;
+        if (playing && fogClock > 5f && t > 0f) k = t < 3f ? t / 3f : (t < 9f ? 1f : Mathf.Clamp01((13f - t) / 4f));
+        k = Mathf.SmoothStep(0f, 1f, k);
+        RenderSettings.fogDensity = Mathf.Lerp(IceFogBase, IceFogPeak, k);
+        RenderSettings.fogColor = Color.Lerp(new Color(0.78f, 0.84f, 0.9f), new Color(0.86f, 0.89f, 0.92f), k);
+        int cycle = Mathf.FloorToInt(fogClock / FogEvery);
+        if (playing && t > -2f && t < 0f && fogWarned != cycle) { fogWarned = cycle; AddFeed("NEVOA SE APROXIMANDO", new Color(0.7f, 0.9f, 1f)); }
+    }
+
     public void StartMatch(bool isTutorial)
     {
         ClearMatch();
+        LoadMap(isTutorial ? 0 : Settings.map);
         state = isTutorial ? State.Tutorial : State.Playing;
         scoreLimit = isTutorial ? 9999 : Settings.scoreLimit;
         timeLeft = Settings.minutes * 60f;
@@ -244,14 +374,43 @@ public class Game : MonoBehaviour
             nextCrate = Time.time + 25f;
             if (Settings.mode == 1) { scoreLimit = 9999; bomb = gameObject.AddComponent<BombMode>(); }
             else Banner("MATA-MATA EM EQUIPE  -  PRIMEIRO A " + scoreLimit);
+            if (Settings.mode == 0) RaceKeys.Spawn();   // easter egg da CASA (so no mata-mata)
         }
         else tutorial = gameObject.AddComponent<Tutorial>();
         menus.Close();
     }
 
+    // Modo campanha: missao 1 (Mercado). Voce, Kate e Harold contra a MOLOCH, para resgatar a Sankhya.
+    public void StartCampaign()
+    {
+        ClearMatch();
+        LoadMap(0);
+        state = State.Playing;
+        scoreLimit = 9999;
+        timeLeft = 99999f;
+        menuCam.gameObject.SetActive(false);
+        int pa = Settings.agent;
+        if (pa == 2 || pa == 3 || pa == 6 || pa == 7) pa = 0;   // esses agentes sao personagens da historia
+        player = MakeActor("VOCE", 0, true, false, pa);
+        pc = player.GetComponent<PlayerController>();
+        nextCrate = float.MaxValue;   // sem caixa laranja na campanha
+        campaign = gameObject.AddComponent<Campaign>();
+        menus.Close();
+    }
+
+    public void FinishCampaign(bool won)
+    {
+        if (matchOver) return;
+        matchOver = true;
+        Sfx.UI("ult", 0.8f);
+        menus.Open(Menus.Page.End);
+    }
+
     // Um helicoptero por time (na base), duas motos e um jetpack no meio do mapa.
     void SpawnToys()
     {
+        if (Arena.Casa) return;   // mapa pequeno: sem veiculos
+        if (Arena.Ice) { JetpackPickup.Spawn(Arena.Center(10, 12)); return; }   // mapa fechado: sem helicoptero nem moto
         Helicopter.Spawn(Arena.Center(5, 2), 0f, 0);
         Helicopter.Spawn(Arena.Center(Arena.W - 6, Arena.H - 3), 180f, 1);
         Bike.Spawn(Arena.Center(12, 4), 0f);
@@ -341,7 +500,9 @@ public class Game : MonoBehaviour
         Net net = Net.I;
         NetPlayer me = net.Me();
         if (me == null) return;
+        net.reward = null;
         ClearMatch();
+        LoadMap(Arena.MapFromName(net.roomMap));
         bool host = net.IsHost;
         Settings.mode = net.roomMode == "BOMBA" ? 1 : 0;
         state = State.Playing;
@@ -384,9 +545,13 @@ public class Game : MonoBehaviour
 
     public void ClearMatch()
     {
+        RaceKeys.Clear();
+        if (Race.I != null) Destroy(Race.I.gameObject);
         if (NetGame.I != null) { NetGame.I.enabled = false; Destroy(NetGame.I); NetGame.I = null; }
         if (bomb != null) Destroy(bomb);
         bomb = null;
+        if (campaign != null) Destroy(campaign);
+        campaign = null;
         roundMode = false;
         for (int i = Vehicle.All.Count - 1; i >= 0; i--) if (Vehicle.All[i] != null) Destroy(Vehicle.All[i].gameObject);
         for (int i = SupplyCrate.All.Count - 1; i >= 0; i--) if (SupplyCrate.All[i] != null) Destroy(SupplyCrate.All[i].gameObject);
@@ -474,8 +639,9 @@ public class Game : MonoBehaviour
         bool hold = state != State.Menu && menus != null && menus.IsOpen;
         if (hold && music.isPlaying) music.Pause();
         else if (!hold && !music.isPlaying) music.UnPause();
-        rainAudio.volume = Settings.rain ? 0.2f * Settings.sfx : 0f;
+        rainAudio.volume = Settings.rain && !Arena.Ice ? 0.2f * Settings.sfx : 0f;
         UpdateRain();
+        UpdateIceFog();
         Post.Tick();
 
         if (state == State.Menu)
@@ -488,6 +654,9 @@ public class Game : MonoBehaviour
         }
         if (matchOver) return;
 
+#if UNITY_EDITOR
+        if (Arena.Casa && player != null && !menus.IsOpen && Input.GetKeyDown(KeyCode.F8)) Arena.CasaTour(player);
+#endif
         if (NetGame.IsClient) { while (feed.Count > 0 && Time.time - feed[0].time > 6f) feed.RemoveAt(0); return; }
         if (state == State.Playing && !roundMode)
         {
@@ -495,7 +664,7 @@ public class Game : MonoBehaviour
             if (timeLeft <= 0f) { timeLeft = 0f; EndMatch(); return; }
         }
         // Caixa laranja: de tempos em tempos cai uma em um ponto aleatorio (no maximo duas no mapa).
-        if (state == State.Playing && Time.time >= nextCrate)
+        if (state == State.Playing && Time.time >= nextCrate && !Arena.Ice && !Arena.Casa)
         {
             nextCrate = Time.time + 50f;
             if (SupplyCrate.All.Count < 2)
@@ -543,6 +712,11 @@ public class Game : MonoBehaviour
                 Sfx.UI("kill", 0.8f);
             }
             return;
+        }
+        if (!suicide)
+        {
+            if (head) killer.headshots++;
+            if (victim.creature || victim.metal) killer.bigKills++;
         }
         if (victim.creature || roundMode)
         {
@@ -649,6 +823,7 @@ public class Game : MonoBehaviour
     void OnGUI()
     {
         if (state == State.Menu || player == null || pc == null || pc.cam == null) return;
+        if (Race.Active) return;   // na corrida da montanha a tela e da corrida
         EnsureStyle();
         float s = Screen.height / 1080f;
         GUI.matrix = Matrix4x4.Scale(new Vector3(s, s, 1f));
@@ -678,17 +853,10 @@ public class Game : MonoBehaviour
             else Text(cx - 200f, cy + r - 60f, 400f, 26f, "SHIFT  -  PRENDER O FOLEGO", 14, new Color(1f, 1f, 1f, 0.6f), TextAnchor.MiddleCenter);
         }
 
-        // Dano levado e sobrecarga
-        float df = 1f - Mathf.Clamp01((Time.time - damageFlash) / 0.6f);
+        // Dano levado e vida baixa: brilho vermelho nas bordas (mais forte do lado de onde veio o tiro).
         float lowHp = player.maxHealth * 0.25f;
-        float low = player.alive ? Mathf.Clamp01((lowHp - player.health) / lowHp) * 0.35f : 0f;
-        float va = Mathf.Max(df * 0.45f, low);
-        if (va > 0.01f)
-        {
-            Color red = new Color(1f, 0.05f, 0.15f, va);
-            Fill(0f, 0f, vw, 60f, red); Fill(0f, vh - 60f, vw, 60f, red);
-            Fill(0f, 60f, 60f, vh - 120f, red); Fill(vw - 60f, 60f, 60f, vh - 120f, red);
-        }
+        float low = player.alive ? Mathf.Clamp01((lowHp - player.health) / lowHp) : 0f;
+        Fx.DrawScreenBlood(vw, vh, low);
         if (player.blindUntil > Time.time)
         {
             float k = Mathf.Clamp01((player.blindUntil - Time.time) / 1.2f);
@@ -707,49 +875,91 @@ public class Game : MonoBehaviour
             Text(cx - 300f, 170f, 600f, 40f, "SOBRECARGA  " + Mathf.CeilToInt(pc.overUntil - Time.time) + "s", 28, Art.Yellow, TextAnchor.MiddleCenter);
         }
 
-        // Mira
+        // Mira tatica (Crosshair reformulado + Hitmarker estilo Call of Duty)
         if (player.alive && !matchOver && !scoped && !(player.vehicle is Bike))
         {
-            float gap = 6f + pc.curSpread * 9f;
-            Color cc = new Color(1f, 1f, 1f, 0.9f);
             if (!(pc.ads && pc.cur != 1))
             {
-                Fill(cx - gap - 12f, cy - 1f, 12f, 2f, cc);
-                Fill(cx + gap, cy - 1f, 12f, 2f, cc);
-                Fill(cx - 1f, cy - gap - 12f, 2f, 12f, cc);
-                Fill(cx - 1f, cy + gap, 2f, 12f, cc);
-            }
-            // Mirando com mira de ponto (Vetor, Bazuca): ponto vermelho com anel fino, como um red dot.
-            if (pc.ads && (pc.cur == 0 || pc.cur == 3 || pc.cur == 4))
-            {
-                Color rd = new Color(1f, 0.12f, 0.1f, 0.95f);
-                Fill(cx - 3f, cy - 3f, 6f, 6f, rd);
-                Fill(cx - 2f, cy - 4f, 4f, 8f, rd); Fill(cx - 4f, cy - 2f, 8f, 4f, rd);
-                Color ring = new Color(1f, 0.12f, 0.1f, 0.55f);
-                for (int i = 0; i < 24; i++)
+                if (Aim.chOn) Aim.Draw(cx, cy, pc.curSpread);   // mira personalizada (OPCOES > MIRA)
+                else
                 {
-                    float a = i * Mathf.PI * 2f / 24f;
-                    Fill(cx + Mathf.Cos(a) * 22f - 1f, cy + Mathf.Sin(a) * 22f - 1f, 2.5f, 2.5f, ring);
+                    if (pc.isSprinting)
+                    {
+                        // Em sprint: apenas ponto discreto central (estilo CoD)
+                        Fill(cx - 2f, cy - 2f, 4f, 4f, new Color(0f, 0f, 0f, 0.7f));
+                        Fill(cx - 1f, cy - 1f, 2f, 2f, new Color(1f, 1f, 1f, 0.75f));
+                    }
+                    else
+                    {
+                        float gap = 5f + pc.curSpread * 8f;
+                        float len = 9f;
+                        float th = 2f;
+                        Color cc = new Color(1f, 1f, 1f, 0.94f);
+                        Color ol = new Color(0f, 0f, 0f, 0.75f);
+                        // Contorno escuro 1px
+                        Fill(cx - gap - len - 1f, cy - th * 0.5f - 1f, len + 2f, th + 2f, ol);
+                        Fill(cx + gap - 1f, cy - th * 0.5f - 1f, len + 2f, th + 2f, ol);
+                        Fill(cx - th * 0.5f - 1f, cy - gap - len - 1f, th + 2f, len + 2f, ol);
+                        Fill(cx - th * 0.5f - 1f, cy + gap - 1f, th + 2f, len + 2f, ol);
+                        Fill(cx - 2f, cy - 2f, 4f, 4f, ol);
+                        // Bracos nítidos + ponto central
+                        Fill(cx - gap - len, cy - th * 0.5f, len, th, cc);
+                        Fill(cx + gap, cy - th * 0.5f, len, th, cc);
+                        Fill(cx - th * 0.5f, cy - gap - len, th, len, cc);
+                        Fill(cx - th * 0.5f, cy + gap, th, len, cc);
+                        Fill(cx - 1f, cy - 1f, 2f, 2f, cc);
+                    }
                 }
             }
-            else Fill(cx - 1.5f, cy - 1.5f, 3f, 3f, tc);
+            // Mirando (ADS): ponto vermelho limpo com contorno sutil
+            if (pc.ads && (pc.cur == 0 || pc.cur == 3 || pc.cur == 4))
+            {
+                Fill(cx - 3.5f, cy - 3.5f, 7f, 7f, new Color(0f, 0f, 0f, 0.55f));
+                Fill(cx - 2.5f, cy - 2.5f, 5f, 5f, new Color(1f, 0.14f, 0.12f, 0.96f));
+                Fill(cx - 1f, cy - 1f, 2f, 2f, new Color(1f, 0.75f, 0.75f, 0.95f));
+            }
         }
         float ht = Time.time - hitTime;
-        if (ht < 0.25f)
+        if (ht < 0.20f)
         {
-            Color hc = hitKill ? new Color(1f, 0.2f, 0.2f, 1f) : (hitHead ? Art.Yellow : Color.white);
-            hc.a = 1f - ht / 0.25f;
-            float o = 10f, l = 10f;
-            Fill(cx - o - l, cy - o - l, l, 3f, hc); Fill(cx + o, cy - o - l, l, 3f, hc);
-            Fill(cx - o - l, cy + o + l - 3f, l, 3f, hc); Fill(cx + o, cy + o + l - 3f, l, 3f, hc);
+            float tNorm = ht / 0.20f;
+            float alpha = 1f - tNorm * tNorm;
+            float pop = hitHead ? Mathf.Lerp(1.35f, 1.05f, tNorm) : Mathf.Lerp(1.15f, 1.0f, tNorm);
+            Color hc = hitHead ? new Color(1f, 0.18f, 0.18f, alpha) : new Color(1f, 1f, 1f, alpha);
+            Color ho = new Color(0f, 0f, 0f, alpha * 0.7f);
+            float gap = 5.5f * pop, len = 9.5f * pop, th = 2.2f;
+
+            Matrix4x4 prevMat = GUI.matrix;
+            GUIUtility.RotateAroundPivot(45f, new Vector2(cx, cy));
+            // X principal estilo Call of Duty
+            Fill(cx - gap - len - 1f, cy - th * 0.5f - 1f, len + 2f, th + 2f, ho);
+            Fill(cx + gap - 1f, cy - th * 0.5f - 1f, len + 2f, th + 2f, ho);
+            Fill(cx - th * 0.5f - 1f, cy - gap - len - 1f, th + 2f, len + 2f, ho);
+            Fill(cx - th * 0.5f - 1f, cy + gap - 1f, th + 2f, len + 2f, ho);
+
+            Fill(cx - gap - len, cy - th * 0.5f, len, th, hc);
+            Fill(cx + gap, cy - th * 0.5f, len, th, hc);
+            Fill(cx - th * 0.5f, cy - gap - len, th, len, hc);
+            Fill(cx - th * 0.5f, cy + gap, th, len, hc);
+
+            // Headshot: segundo X externo sutil estilo CoD
+            if (hitHead)
+            {
+                float g2 = gap + len + 2.5f, l2 = 4.5f;
+                Fill(cx - g2 - l2, cy - th * 0.5f, l2, th, hc);
+                Fill(cx + g2, cy - th * 0.5f, l2, th, hc);
+                Fill(cx - th * 0.5f, cy - g2 - l2, th, l2, hc);
+                Fill(cx - th * 0.5f, cy + g2, th, l2, hc);
+            }
+            GUI.matrix = prevMat;
         }
 
         // Placar e tempo (ou o passo do tutorial)
-        if (!tut)
+        if (!tut && campaign == null)
         {
             Fill(cx - 250f, 18f, 500f, 64f, new Color(0f, 0f, 0f, 0.55f));
             Fill(cx - 250f, 80f, 250f, 2f, Art.Ball); Fill(cx, 80f, 250f, 2f, Art.Moloch);
-            Text(cx - 240f, 18f, 150f, 64f, roundMode ? "BALL (ATQ)" : "BALL", 22, Art.Ball, TextAnchor.MiddleLeft);
+            Text(cx - 240f, 18f, 150f, 64f, roundMode ? "BAAL (ATQ)" : "BAAL", 22, Art.Ball, TextAnchor.MiddleLeft);
             Text(cx - 130f, 18f, 80f, 64f, score[0].ToString(), 40, Art.Ball, TextAnchor.MiddleCenter);
             Text(cx + 50f, 18f, 80f, 64f, score[1].ToString(), 40, Art.Moloch, TextAnchor.MiddleCenter);
             Text(cx + 90f, 18f, 150f, 64f, roundMode ? "MOLOCH (DEF)" : "MOLOCH", 22, Art.Moloch, TextAnchor.MiddleRight);
@@ -932,7 +1142,9 @@ public class Game : MonoBehaviour
                 Actor a = actors[i];
                 if (a == null || a.team != team) continue;
                 if (a.isPlayer) Fill(x + 20f, ry, w - 40f, 32f, new Color(1f, 1f, 1f, 0.08f));
-                Text(x + 30f, ry, 300f, 32f, a.displayName, 22, a.alive ? c : new Color(c.r, c.g, c.b, 0.45f), TextAnchor.MiddleLeft);
+                int lv = NetGame.LevelOf(a);
+                if (lv > 0) Text(x + 30f, ry, 60f, 32f, "NV " + lv, 14, new Color(1f, 0.86f, 0.1f, 0.85f), TextAnchor.MiddleLeft);
+                Text(x + (lv > 0 ? 86f : 30f), ry, 300f, 32f, a.displayName, 22, a.alive ? c : new Color(c.r, c.g, c.b, 0.45f), TextAnchor.MiddleLeft);
                 Text(x + w - 260f, ry, 100f, 32f, a.kills.ToString(), 22, Color.white, TextAnchor.MiddleCenter);
                 Text(x + w - 140f, ry, 100f, 32f, a.deaths.ToString(), 22, Color.white, TextAnchor.MiddleCenter);
                 ry += 34f;

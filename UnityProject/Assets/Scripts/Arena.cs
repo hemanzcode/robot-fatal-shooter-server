@@ -4,15 +4,49 @@ using UnityEngine;
 // Vila no deserto (layout original) gerada a partir de um mapa de texto. O mesmo mapa serve de malha de navegacao dos bots.
 // '#' casa/muro  'o' pilar  'x' caixotes  'd' portal em arco  'T' passagem coberta  'J' plataforma de salto  'P' item  'A' spawn (espelhado vira 'B')
 // 'S' escada encostada na casa vizinha (sobe ao telhado)  'U' entrada do esgoto (escada descendo para os tuneis)
-public static class Arena
+public static partial class Arena
 {
-    public const float Cell = 4f;
+    public static float Cell = 4f;   // 4 m nos mapas grandes; 0,5 m na CASA
     public static int W, H;
     public static char[,] map;
     public static readonly List<Vector3> spawnsA = new List<Vector3>();
     public static readonly List<Vector3> spawnsB = new List<Vector3>();
     public static readonly List<Vector3> walkable = new List<Vector3>();
     public static Texture2D minimap;
+
+    // Mapas: 0 = MERCADO (vila no deserto), 1 = NO GELO (base congelada, fechada, sem mecas nem dinossauros).
+    public static int mapId = -1;
+    public static bool Ice { get { return mapId == 1; } }
+    public static readonly string[] MapNames = { "MERCADO", "NO GELO", "A CASA" };
+    public static int MapFromName(string n) { int i = System.Array.IndexOf(MapNames, n); return i < 0 ? 0 : i; }
+    // Celulas pedidas para os pontos de bomba (o BombMode acha a livre mais proxima).
+    public static int[] SiteA { get { return Casa ? CellOf(5f, -8.5f) : (Ice ? new[] { 7, 16 } : new[] { 3, 17 }); } }
+    public static int[] SiteB { get { return Casa ? CellOf(-15.7f, 11f) : (Ice ? new[] { 11, 21 } : new[] { 19, 17 }); } }
+    static int[] CellOf(float x, float z) { int cx, cy; ToCell(new Vector3(x, 0f, z), out cx, out cy); return new[] { cx, cy }; }
+
+    // NO GELO: corredores de uma celula, muitos trechos cobertos ('T'), portoes 'G' (abrem e fecham),
+    // escadas 'S' para os tetos, entradas 'U' para o subterraneo e colunas de gelo 'o'.
+    static readonly string[] iceHalf =
+    {
+        "#########################",
+        "#A.A.#......T......#..P.#",
+        "#....G.###..T..###.#....#",
+        "#A.A.#.#S.......S#.G.x..#",
+        "##G###.#..x.o.x..#.###.##",
+        "#....T.###.#U#.###.T....#",
+        "#.##.#.....#.#.....#.##.#",
+        "#.#S.G.x.###.###.x.G.S#.#",
+        "#.#..#.....T.T.....#..#.#",
+        "#U#.####.#.....#.####.#.#",
+        "#...T..S.#.x.x.#.S..T...#",
+        "####.#####G###G#####.####",
+        "#P...x...T..o..T...x...P#"
+    };
+    static readonly int[][] IceSewerHalf =
+    {
+        new[] { 1, 10 }, new[] { 1, 11 },
+        new[] { 12, 6 }, new[] { 12, 7 }, new[] { 12, 8 }, new[] { 12, 9 }, new[] { 12, 10 }, new[] { 12, 11 }
+    };
 
     // Metade de cima; a metade de baixo e gerada girando 180 graus (mapa simetrico e justo).
     static readonly string[] half =
@@ -45,6 +79,7 @@ public static class Arena
 
     static void BuildMap()
     {
+        string[] half = Ice ? iceHalf : Arena.half;
         W = half[0].Length;
         H = half.Length * 2 - 1;
         map = new char[W, H];
@@ -74,7 +109,7 @@ public static class Arena
     {
         if (x < 0 || y < 0 || x >= W || y >= H) return false;
         char c = map[x, y];
-        return c != '#' && c != 'o' && c != 'x' && c != 'U';
+        return c != '#' && c != 'o' && c != 'x' && c != 'U' && c != '~';
     }
 
     // ------------------------------ Esgoto (subterraneo) ------------------------------
@@ -95,7 +130,7 @@ public static class Arena
         sewer = new bool[W, H];
         int mid = (H - 1) / 2;
         for (int x = 1; x < W - 1; x++) sewer[x, mid] = true;   // tunel principal, de ponta a ponta
-        foreach (int[] c in SewerHalf)
+        foreach (int[] c in (Ice ? IceSewerHalf : SewerHalf))
         {
             sewer[c[0], c[1]] = true;
             sewer[W - 1 - c[0], H - 1 - c[1]] = true;
@@ -190,10 +225,14 @@ public static class Arena
     static Material sand, paving, wood, stone, dark;
     static Material[] walls;
 
-    public static void Build(Transform root)
+    public static void Build(Transform root, int id = 0)
     {
+        mapId = id;
+        Gate.All.Clear();
         sewerLamps = 0;
-        BuildMap();
+        Cell = 4f;
+        Breakable.All.Clear();
+        if (!Casa) BuildMap();
         Art.BuildTextures();
         spawnsA.Clear(); spawnsB.Clear(); walkable.Clear();
         float sizeX = W * Cell, sizeZ = H * Cell;
@@ -211,6 +250,30 @@ public static class Arena
             Art.Pbr("Bricks084", new Color(0.85f, 0.72f, 0.58f), 3f, 1f, 0f, 0f, 1.1f)
         };
 
+        if (Casa)
+        {
+            BuildCasa(root);
+            BuildMinimap();
+            return;
+        }
+
+        if (Ice)
+        {
+            // Paleta fria: neve no chao, concreto e metal congelados nas paredes.
+            sand = Art.Pbr("Plaster001", new Color(1.12f, 1.17f, 1.26f), 6f, 1.3f, 0f, 0f, 0.6f);   // neve
+            paving = Art.Pbr("Concrete034", new Color(0.82f, 0.88f, 0.96f), 3.5f, 1.2f, 0f, 0f);
+            wood = Art.Pbr("Planks037A", new Color(0.78f, 0.74f, 0.72f), 1.6f, 1f, 0f, 0f);
+            stone = Art.Pbr("Concrete034", new Color(0.7f, 0.76f, 0.84f), 2.5f, 1f, 0f, 0f);
+            dark = Art.Mat(new Color(0.03f, 0.04f, 0.06f), Color.black, 0f, default(Color), 0.3f, 0f);
+            walls = new Material[]
+            {
+                Art.Pbr("Plaster001", new Color(0.8f, 0.88f, 0.98f), 4f, 1f, 0f, 0f),
+                Art.Pbr("Metal032", new Color(0.62f, 0.7f, 0.8f), 2.5f, 1f, 0.2f, 0f),
+                Art.Pbr("Concrete034", new Color(0.78f, 0.86f, 0.96f), 3f, 1.1f, 0f, 0f),
+                Art.Pbr("Concrete034", new Color(0.55f, 0.62f, 0.72f), 3f, 1f, 0f, 0f)
+            };
+        }
+
         // Chao: areia em toda a volta; so as entradas do esgoto ficam abertas.
         Ground(root, sizeX, sizeZ);
         // Casas num grupo proprio: no fim viram poucas malhas (static batching) para nao pesar no celular.
@@ -227,7 +290,9 @@ public static class Arena
                 if (Walk(x, y)) walkable.Add(p);
 
                 if (sewer[x, y] && c != 'U') SewerCell(root, x, y, p);
-                if (c == '#') House(houses, x, y, p);
+                if (c == '#') { if (Ice) IceBlock(houses, x, y, p); else House(houses, x, y, p); }
+                else if (c == 'G') Gate.Build(root, x, y, p, !Walk(x - 1, y) && !Walk(x + 1, y), stone, dark);
+                else if (c == 'o' && Ice) IcePillar(root, p, hsh);
                 else if (c == 'S') Stairs(root, x, y, p);
                 else if (c == 'U') SewerEntrance(root, x, y, p);
                 else if (c == 'o') Fountain.Build(root, p, stone, hsh);
@@ -251,12 +316,13 @@ public static class Arena
                 else if (c == 'A') spawnsA.Add(p);
                 else if (c == 'B') spawnsB.Add(p);
 
-                if (c == '.' && x % 6 == 3 && y % 5 == 1 && hsh > 0.35f) Palm(root, p + new Vector3(1.2f, 0f, 1.1f), hsh);
+                if (Ice) { if (c == '.' && hsh > 0.82f) SnowPile(root, p, hsh); }
+                else if (c == '.' && x % 6 == 3 && y % 5 == 1 && hsh > 0.35f) Palm(root, p + new Vector3(1.2f, 0f, 1.1f), hsh);
                 else if (c == '.' && ExtraPalm(x, y)) Palm(root, p + new Vector3(0.9f, 0f, -0.8f), Hash(x * 3 + 1, y * 7 + 2));
                 if (c == '.' && hsh > 0.93f) Barrels(root, p + new Vector3(-1.2f, 0f, 1.2f), hsh);
             }
         }
-        Surroundings(root, sizeX, sizeZ);
+        if (Ice) IceSurroundings(root, sizeX, sizeZ); else Surroundings(root, sizeX, sizeZ);
         BuildMinimap();
         try { StaticBatchingUtility.Combine(houses.gameObject); } catch (System.Exception) { }
     }
@@ -918,6 +984,106 @@ public static class Arena
         }
     }
 
+    // ------------------------------ NO GELO ------------------------------
+
+    // Bloco macico (bunker/muro de gelo). Teto plano e firme: as escadas 'S' levam ate ele.
+    static void IceBlock(Transform root, int x, int y, Vector3 p)
+    {
+        bool edge = IsEdge(x, y);
+        float g = Hash(x / 2 + 31, y / 2 + 7);
+        float h = edge ? 8f + g * 2.5f : (NextToStairs(x, y) || g < 0.6f ? 4.6f : 5.9f);
+        Material m = walls[(int)(Hash(x / 2 + 5, y / 2 + 11) * 3.99f)];
+        Art.Box(root, p + Vector3.up * (h / 2f), new Vector3(Cell, h, Cell), m, true, "block");
+        // Laje do teto com neve por cima (pisavel).
+        Art.Box(root, p + Vector3.up * (h + 0.12f), new Vector3(Cell + 0.3f, 0.3f, Cell + 0.3f), stone, true, "parapet");
+        Art.Box(root, p + Vector3.up * (h + 0.29f), new Vector3(Cell + 0.1f, 0.06f, Cell + 0.1f), sand, false, "roofSnow");
+        if (edge) return;
+        Material ice = IceMat();
+        for (int d = 0; d < 4; d++)
+        {
+            int nx = x + DX[d], ny = y + DY[d];
+            if (!Walk(nx, ny) || map[nx, ny] == 'S' || map[nx, ny] == 'G') continue;
+            Vector3 n = new Vector3(DX[d], 0f, DY[d]);
+            Vector3 side = new Vector3(-n.z, 0f, n.x);
+            Vector3 face = p + n * (Cell / 2f);
+            Quaternion rot = Quaternion.LookRotation(n);
+            float k = Hash(x * 7 + d, y * 13 + d);
+            if (k < 0.3f)
+            {
+                // Faixa de luz fria na parede (ajuda a enxergar nos corredores fechados).
+                Piece(root, face + Vector3.up * 2.6f + n * 0.03f, rot, new Vector3(2.6f, 0.08f, 0.05f), Art.Glow(new Color(0.45f, 0.85f, 1f), 1.1f), "lightStrip");
+            }
+            else if (k < 0.55f)
+            {
+                // Porta de servico de metal fechada, com placa.
+                Piece(root, face + Vector3.up * 1.15f + n * 0.04f, rot, new Vector3(1.3f, 2.3f, 0.1f), walls[1], "hatch");
+                Piece(root, face + Vector3.up * 2.55f + n * 0.06f, rot, new Vector3(0.5f, 0.2f, 0.04f), Art.Glow(Art.Yellow, 0.5f), "sign");
+            }
+            else if (k < 0.75f)
+            {
+                // Pingentes de gelo na beirada.
+                for (int i = 0; i < 5; i++)
+                {
+                    float len = 0.25f + Hash(x * 3 + i, y * 5 + d) * 0.55f;
+                    Piece(root, face + n * 0.08f + side * ((i - 2) * 0.7f) + Vector3.up * (4.45f - len / 2f), rot, new Vector3(0.09f, len, 0.09f), ice, "icicle");
+                }
+            }
+            // Gelo acumulado no pe da parede.
+            if (k > 0.4f) Piece(root, face + n * 0.3f + Vector3.up * 0.12f, rot, new Vector3(Cell * 0.85f, 0.24f, 0.6f), sand, "drift");
+        }
+    }
+
+    static Material IceMat() { return Art.Mat(new Color(0.62f, 0.82f, 0.95f), new Color(0.05f, 0.14f, 0.2f), 0f, default(Color), 0.95f, 0.05f); }
+
+    // Coluna de gelo (no lugar da fonte do MERCADO): cristais grandes com luz azulada.
+    static void IcePillar(Transform root, Vector3 p, float hsh)
+    {
+        Material ice = IceMat();
+        Art.Box(root, p + Vector3.up * 0.2f, new Vector3(3.2f, 0.4f, 3.2f), stone, true, "pillarBase");
+        for (int i = 0; i < 4; i++)
+        {
+            float h = 3.2f + Hash(i, (int)(hsh * 100f)) * 2.6f;
+            Vector3 off = new Vector3((i % 2 == 0 ? -1f : 1f) * 0.45f, 0f, (i < 2 ? -1f : 1f) * 0.45f) * (i == 0 ? 0.2f : 1f);
+            GameObject c = Art.Box(root, p + off + Vector3.up * (h / 2f + 0.3f), new Vector3(0.9f, h, 0.9f), ice, true, "crystal");
+            c.transform.rotation = Quaternion.Euler((i - 1.5f) * 6f, hsh * 90f + i * 37f, (i % 2 == 0 ? 5f : -7f));
+        }
+        Art.PointLight(root, p + Vector3.up * 2.5f, new Color(0.5f, 0.85f, 1f), 9f, 1.4f);
+    }
+
+    static void SnowPile(Transform root, Vector3 p, float hsh)
+    {
+        Vector3 off = new Vector3((hsh - 0.9f) * 12f, 0f, (0.5f - hsh) * 6f);
+        Art.Prim(PrimitiveType.Sphere, root, p + off + Vector3.up * 0.05f, new Vector3(1.6f + hsh, 0.5f, 1.2f + hsh * 0.5f), sand, false, "snowPile");
+    }
+
+    // Em volta: outras construcoes da base e montanhas nevadas ao longe.
+    static void IceSurroundings(Transform root, float sizeX, float sizeZ)
+    {
+        System.Random r = new System.Random(91);
+        float half = Mathf.Max(sizeX, sizeZ) / 2f;
+        for (int i = 0; i < 45; i++)
+        {
+            float ang = (float)r.NextDouble() * Mathf.PI * 2f;
+            float dist = half + 12f + (float)r.NextDouble() * 70f;
+            float w = 8f + (float)r.NextDouble() * 14f, d = 8f + (float)r.NextDouble() * 14f, h = 5f + (float)r.NextDouble() * 10f;
+            Vector3 p = new Vector3(Mathf.Cos(ang) * dist, 0f, Mathf.Sin(ang) * dist);
+            if (Mathf.Abs(p.x) < sizeX / 2f + 4f && Mathf.Abs(p.z) < sizeZ / 2f + 4f) continue;
+            Art.Box(root, p + Vector3.up * (h / 2f), new Vector3(w, h, d), walls[r.Next(walls.Length)], false, "farBlock");
+            Art.Box(root, p + Vector3.up * (h + 0.2f), new Vector3(w + 0.4f, 0.4f, d + 0.4f), sand, false, "farSnow");
+            if (r.NextDouble() < 0.2) Art.Box(root, p + new Vector3(0f, h + 5f, 0f), new Vector3(0.4f, 10f, 0.4f), walls[1], false, "antenna");
+        }
+        Material rock = Art.Mat(new Color(0.22f, 0.25f, 0.3f), Color.black, 0f, default(Color), 0.2f, 0f);
+        for (int i = 0; i < 18; i++)
+        {
+            float ang = i / 18f * Mathf.PI * 2f + (float)r.NextDouble() * 0.3f;
+            float dist = half + 150f + (float)r.NextDouble() * 120f;
+            float s = 110f + (float)r.NextDouble() * 150f, hh = 60f + (float)r.NextDouble() * 70f;
+            Vector3 c = new Vector3(Mathf.Cos(ang) * dist, -8f, Mathf.Sin(ang) * dist);
+            Art.Prim(PrimitiveType.Sphere, root, c, new Vector3(s, hh, s * 0.85f), rock, false, "mountain");
+            Art.Prim(PrimitiveType.Sphere, root, c + Vector3.up * hh * 0.18f, new Vector3(s * 0.7f, hh * 0.75f, s * 0.6f), sand, false, "mountainSnow");
+        }
+    }
+
     static void BuildMinimap()
     {
         minimap = new Texture2D(W, H, TextureFormat.RGBA32, false);
@@ -928,13 +1094,15 @@ public static class Arena
             for (int x = 0; x < W; x++)
             {
                 char c = map[x, y];
-                Color col = new Color(0.1f, 0.08f, 0.05f, 0.8f);
-                if (c == '#' || c == 'o') col = new Color(0.62f, 0.52f, 0.36f, 0.92f);
+                Color col = Ice ? new Color(0.06f, 0.08f, 0.12f, 0.8f) : new Color(0.1f, 0.08f, 0.05f, 0.8f);
+                if (c == '#' || c == 'o') col = Ice ? new Color(0.55f, 0.66f, 0.8f, 0.92f) : new Color(0.62f, 0.52f, 0.36f, 0.92f);
+                else if (c == 'G') col = new Color(1f, 0.6f, 0.1f, 0.95f);
                 else if (c == 'x') col = new Color(0.45f, 0.28f, 0.12f, 0.9f);
                 else if (c == 'J') col = new Color(0.9f, 0.8f, 0.2f, 0.9f);
-                else if (c == 'T' || c == 'd') col = new Color(0.22f, 0.18f, 0.12f, 0.85f);
+                else if (c == 'T' || c == 'd') col = Ice ? new Color(0.16f, 0.2f, 0.27f, 0.85f) : new Color(0.22f, 0.18f, 0.12f, 0.85f);
                 else if (c == 'U') col = new Color(0.2f, 0.55f, 0.75f, 0.95f);
                 else if (c == 'S') col = new Color(0.85f, 0.85f, 0.85f, 0.9f);
+                else if (c == '~') col = new Color(0.2f, 0.6f, 0.9f, 0.95f);
                 minimap.SetPixel(x, y, col);
             }
         }

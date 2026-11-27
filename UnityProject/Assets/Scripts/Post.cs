@@ -82,7 +82,8 @@ public static class Post
         d.dithering = true;
     }
 
-    public static void Sky()
+    public static void Sky() { Sky(false); }
+    public static void Sky(bool ice)
     {
         Shader sh = Shader.Find("Skybox/Procedural");
         if (sh == null) { RenderSettings.skybox = null; RenderSettings.ambientMode = AmbientMode.Flat; RenderSettings.ambientLight = new Color(0.55f, 0.55f, 0.6f); return; }
@@ -90,9 +91,10 @@ public static class Post
         m.SetFloat("_SunSize", 0.045f);
         m.SetFloat("_SunSizeConvergence", 6f);
         m.SetFloat("_AtmosphereThickness", 1.15f);
-        m.SetColor("_SkyTint", new Color(0.62f, 0.6f, 0.52f));
-        m.SetColor("_GroundColor", new Color(0.62f, 0.52f, 0.38f));
-        m.SetFloat("_Exposure", 1.15f);
+        m.SetColor("_SkyTint", ice ? new Color(0.6f, 0.68f, 0.8f) : new Color(0.62f, 0.6f, 0.52f));
+        m.SetColor("_GroundColor", ice ? new Color(0.8f, 0.85f, 0.9f) : new Color(0.62f, 0.52f, 0.38f));
+        m.SetFloat("_Exposure", ice ? 1.0f : 1.15f);
+        if (ice) m.SetFloat("_AtmosphereThickness", 0.55f);   // menos amarelado no horizonte
         RenderSettings.skybox = m;
         RenderSettings.ambientMode = AmbientMode.Skybox;
         RenderSettings.ambientIntensity = 1.15f;
@@ -123,10 +125,12 @@ public static class Post
         nextProbe = 0f;
     }
 
+    public static void ProbeSize(Vector3 size) { if (probe != null) { probe.size = size; nextProbe = 0f; } }
+
     public static void Tick()
     {
         if (bloom != null) bloom.active = Settings.bloom;
-        Shader.SetGlobalFloat("_NeonRain", Settings.rain ? 1f : 0f);
+        Shader.SetGlobalFloat("_NeonRain", Settings.rain && !Arena.Ice ? 1f : 0f);
         if (probe != null && Time.unscaledTime >= nextProbe)
         {
             probe.RenderProbe();

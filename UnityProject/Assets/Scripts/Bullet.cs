@@ -8,6 +8,7 @@ public class Bullet : MonoBehaviour
     public WeaponDef def;
     public float mult = 1f;
     float age;
+    bool flybyPlayed;
 
     void Update()
     {
@@ -28,14 +29,19 @@ public class Bullet : MonoBehaviour
         if (best >= 0)
         {
             bool head, killed;
-            // Sniper: dano cheio em qualquer distancia (80 no corpo).
-            bool hit = Combat.BulletHit(owner, hits[best], def.damage * mult, def.headMult, def.chestMult, def.name, def.color, out head, out killed);
+            float d = Combat.ApplyDropoff(def, hits[best].distance, def.damage * mult);
+            Actor hitActor = Combat.ActorOf(hits[best].collider);
+            bool hitLocal = Game.I != null && hitActor != null && hitActor == Game.I.player;
+            if (!flybyPlayed) flybyPlayed = Combat.TryBulletFlyby(owner, from, hits[best].point, hitLocal);
+            bool hit = Combat.BulletHit(owner, hits[best], d, def.headMult, def.chestMult, def.name, def.color, out head, out killed);
             Fx.Tracer(from, hits[best].point, new Color(1f, 0.9f, 0.7f, 0.5f), 0.01f, 0.05f);
             if (hit && owner != null && owner.isPlayer && Game.I != null) Game.I.Hitmarker(head, killed);
             Destroy(gameObject);
             return;
         }
-        transform.position = from + step;
+        Vector3 nextPos = from + step;
+        if (!flybyPlayed) flybyPlayed = Combat.TryBulletFlyby(owner, from, nextPos, false);
+        transform.position = nextPos;
         Fx.Tracer(from, transform.position, new Color(1f, 0.9f, 0.7f, 0.35f), 0.008f, 0.04f);
         if (age > 3f || transform.position.y < -30f) Destroy(gameObject);
     }

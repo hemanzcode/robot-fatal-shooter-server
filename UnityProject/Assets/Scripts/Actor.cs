@@ -6,20 +6,24 @@ public class Actor : MonoBehaviour
     public string displayName = "?";
     public int team;
     public bool isPlayer;
-    public float health = 200f;     // jogadores e bots: 200 de vida
-    public float maxHealth = 200f;
+    public float health = 100f;     // jogadores e bots: 100 de vida (modo tatico)
+    public float maxHealth = 100f;
     public bool alive = true;
     public int kills, deaths;
+    public int headshots, bigKills, objectives;   // para o XP da partida online
     public float respawnAt;
     public float lastDamageTime = -99f;
     public float lastRemoved;       // vida que o ultimo TakeDamage tirou de fato (e o numero mostrado na tela)
     public float lastShotTime = -99f;
     public float lastPadTime = -99f;
     public float pendingLaunch;
-    public float blindUntil, stunnedUntil, invulnerableUntil, revealedUntil;
+    public float blindUntil, stunnedUntil, invulnerableUntil, revealedUntil, taggedUntil;
+    public float MoveSpeedMult { get { return Time.time < taggedUntil ? 0.65f : 1f; } }
     public Vector3 externalVel;
     public Vector3 velocity;
     public bool noRespawn;
+    public bool metal;             // meca: solta faisca em vez de sangue
+    public float lastBloodTime = -9f;
     public bool creature;          // dinossauro: sem tiro na cabeca, nao conta ponto ao morrer
     public Vehicle vehicle;        // veiculo que esta pilotando
     public CharacterController cc;
@@ -35,7 +39,7 @@ public class Actor : MonoBehaviour
 
     Vector3 lastPos;
 
-    public Vector3 EyePos { get { return transform.position + Vector3.up * 1.6f; } }
+    public Vector3 EyePos { get { return transform.position + Vector3.up * (1.6f * CrouchScale); } }
     public Vector3 ChestPos { get { return transform.position + Vector3.up * (1.1f * CrouchScale); } }
     public Vector3 HeadPos { get { return transform.position + Vector3.up * (1.66f * CrouchScale); } }
 
@@ -51,7 +55,7 @@ public class Actor : MonoBehaviour
         displayName = n;
         team = t;
         isPlayer = player;
-        if (Mathf.Abs(agentIndex) % AgentBody.Defs.Length == 6) maxHealth = health = 250f;
+        if (!PlayerController.TacticalMode && Mathf.Abs(agentIndex) % AgentBody.Defs.Length == 6) maxHealth = health = 250f;
         if (!player && buildBody) BuildModel();
     }
 
@@ -111,10 +115,30 @@ public class Actor : MonoBehaviour
         }
     }
 
+    // Sangue (ou faisca, no meca) no ponto do acerto. dir = para onde a bala ia.
+    public void Bleed(Vector3 point, Vector3 dir, float dmg, bool head)
+    {
+        if (dmg <= 0f || Time.time < invulnerableUntil) return;
+        lastBloodTime = Time.time;
+        if (metal) { Fx.Spark(point, -dir.normalized, new Color(1f, 0.8f, 0.4f)); return; }
+        // O proprio jogador nao ve o jato (esta dentro da camera): ganha o respingo na tela.
+        if (isPlayer) return;
+        Fx.Blood(point, dir, dmg, head);
+    }
+
+    void DeathFx()
+    {
+        if (metal) Fx.Explosion(ChestPos, Art.TeamColor(team), 0.35f);
+        else Fx.BloodDeath(ChestPos, transform.position);
+    }
+
     // Cliente online: vida e morte vem do host.
     public void NetState(float hp, bool isAlive, bool puppet)
     {
-        if (isPlayer && hp < health - 0.5f && Game.I != null) { Game.I.damageFlash = Time.time; Sfx.UI("hurt", 0.5f); lastDamageTime = Time.time; }
+        if (isPlayer && hp < health - 0.5f && Game.I != null) { Game.I.damageFlash = Time.time; Sfx.UI("hurt", 0.5f); lastDamageTime = Time.time; taggedUntil = Time.time + 0.35f; Fx.ScreenBlood(health - hp); }
+        // Dano que este cliente nao viu acontecer (tiro de outro jogador, explosao): sangra no peito.
+        else if (!isPlayer && alive && hp < health - 0.5f && Time.time - lastBloodTime > 0.6f)
+            Bleed(ChestPos, new Vector3(Random.Range(-1f, 1f), 0.1f, Random.Range(-1f, 1f)), health - hp, false);
         health = hp;
         if (isAlive == alive) return;
         if (!isAlive)
@@ -122,7 +146,7 @@ public class Actor : MonoBehaviour
             if (vehicle != null) vehicle.Exit();
             alive = false;
             respawnAt = Time.time + 3f;
-            Fx.Explosion(ChestPos, Art.TeamColor(team), 0.35f);
+            DeathFx();
             Sfx.At("death", ChestPos, 0.8f);
             if (body != null) body.Die(); else if (model != null) model.SetActive(false);
             if (cc != null) cc.enabled = false;
@@ -148,11 +172,16 @@ public class Actor : MonoBehaviour
         lastRemoved = Mathf.Min(dmg, health);
         health -= lastRemoved;
         lastDamageTime = Time.time;
+        taggedUntil = Time.time + 0.35f;
         if (isPlayer)
         {
             Game.I.damageFlash = Time.time;
             Sfx.UI("hurt", 0.5f);
+            if (weapon != "queda") { if (from != null) Fx.ScreenBlood(lastRemoved, from.EyePos); else Fx.ScreenBlood(lastRemoved); }
         }
+        // Dano sem ponto de acerto (mordida, atropelamento, tiro vindo de um cliente): sangra no peito.
+        else if (Time.time - lastBloodTime > 0.05f && weapon != "tempo" && weapon != "queda")
+            Bleed(ChestPos, from != null ? ChestPos - from.ChestPos : Vector3.down, lastRemoved, head);
         if (onDamaged != null) onDamaged(from);
         if (health <= 0f)
         {
@@ -169,7 +198,7 @@ public class Actor : MonoBehaviour
         health = 0f;
         deaths++;
         respawnAt = Time.time + 3f;
-        Fx.Explosion(ChestPos, Art.TeamColor(team), 0.35f);
+        DeathFx();
         Sfx.At("death", ChestPos, 0.8f);
         if (body != null) body.Die(); else if (model != null) model.SetActive(false);
         if (cc != null) cc.enabled = false;
@@ -190,7 +219,7 @@ public class Actor : MonoBehaviour
         externalVel = Vector3.zero;
         pendingLaunch = 0f;
         lastDamageTime = -99f;
-        blindUntil = stunnedUntil = invulnerableUntil = revealedUntil = 0f;
+        blindUntil = stunnedUntil = invulnerableUntil = revealedUntil = taggedUntil = 0f;
         if (model != null) model.SetActive(true);
         if (body != null) body.Revive();
         if (onRespawn != null) onRespawn();

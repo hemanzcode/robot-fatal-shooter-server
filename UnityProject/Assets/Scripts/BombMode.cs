@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// Modo BOMBA (rodadas, sem renascer): o time BALL ataca e precisa plantar a bomba em A ou B;
+// Modo BOMBA (rodadas, sem renascer): o time BAAL ataca e precisa plantar a bomba em A ou B;
 // o time MOLOCH defende e precisa impedir ou desarmar. Vence a partida quem ganhar RoundsToWin rodadas.
 public class BombMode : MonoBehaviour
 {
@@ -25,8 +25,8 @@ public class BombMode : MonoBehaviour
         useGUILayout = false;
         root = new GameObject("BombSites").transform;
         root.SetParent(transform, false);
-        sites[0] = SiteAt(3, 17);
-        sites[1] = SiteAt(19, 17);
+        sites[0] = SiteAt(Arena.SiteA[0], Arena.SiteA[1]);
+        sites[1] = SiteAt(Arena.SiteB[0], Arena.SiteB[1]);
         for (int i = 0; i < 2; i++)
         {
             Color c = i == 0 ? Art.Red : Art.Yellow;
@@ -62,6 +62,7 @@ public class BombMode : MonoBehaviour
         if (bombObj != null) Destroy(bombObj);
         if (dropObj != null) Destroy(dropObj);
         plantProg = defuseProg = 0f;
+        if (round > 1) { Breakable.ResetAll(); NetGame.SendWalls("W;R"); }   // CASA: paredes inteiras a cada rodada
         Game.I.RespawnAll();
         phase = Phase.Freeze;
         phaseEnd = Time.time + 4f;
@@ -209,6 +210,7 @@ public class BombMode : MonoBehaviour
             plantProg = planting ? plantProg + Time.deltaTime : 0f;
             if (plantProg >= PlantTime)
             {
+                carrier.objectives++;
                 bombPos = carrier.transform.position;
                 bombObj = MakeBomb(bombPos, true);
                 carrier = null;
@@ -246,7 +248,7 @@ public class BombMode : MonoBehaviour
             if (defuser == null && Working(a)) defuser = a;
         }
         defuseProg = defuser != null ? defuseProg + Time.deltaTime : 0f;
-        if (defuseProg >= DefuseTime) { if (bombObj != null) Destroy(bombObj); Win(Defenders, "BOMBA DESARMADA"); return; }
+        if (defuseProg >= DefuseTime) { defuser.objectives++; if (bombObj != null) Destroy(bombObj); Win(Defenders, "BOMBA DESARMADA"); return; }
         if (left <= 0f)
         {
             if (bombObj != null) Destroy(bombObj);

@@ -9,7 +9,9 @@ using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Networking;
 
-[Serializable] public class NetPlayer { public int id; public string name; public int team; public int agent; public bool away; }
+[Serializable] public class NetPlayer { public int id; public string name; public int team; public int agent; public bool away; public int lvl; public string[] equip; }
+[Serializable] public class NetFriend { public string uid, name, code, map, mode; public int lvl, st, n; }   // st: 0 offline, 1 no menu, 2 em sala
+[Serializable] public class NetPack { public string id; public int shots; public string price; }
 [Serializable] public class NetRow { public string map; public string mode; public int rooms; public int players; }
 [Serializable] public class NetOpen { public string code; public string map; public string mode; public string host; public int players; public bool bots; public bool custom; }
 [Serializable]
@@ -21,6 +23,16 @@ public class NetMsg
     public NetPlayer[] players;
     public NetRow[] rooms;
     public NetOpen[] open;
+    // Progresso (perfil, recompensa, PIX)
+    public int xp, lvl, lvlXp, lvlNeed, shots, lastXp, lastShots, lvlUp;
+    public string rank, qr, price, pid;
+    public string[] owned, equip, lines;
+    public bool pix;
+    public NetPack[] packs;
+    // Amigos
+    public NetFriend[] fr, inc, sent;
+    public bool ok;
+    [NonSerialized] public float at;
 }
 [Serializable] class AuthMeta { public string username; }
 [Serializable] class AuthUser { public string id; public string email; public AuthMeta user_metadata; }
@@ -104,7 +116,7 @@ public class Net : MonoBehaviour
     public void ShareInvite()
     {
         if (!InRoom) return;
-        string text = "Bora jogar Robot Fatal Shooter! Sala " + roomCode + " (" + roomMode + "):";
+        string text = "Bora jogar Fatal Shooter! Sala " + roomCode + " (" + roomMode + "):";
         copiedAt = Time.unscaledTime;
 #if UNITY_WEBGL && !UNITY_EDITOR
         RfsShare(text, InviteLink);
@@ -154,6 +166,8 @@ public class Net : MonoBehaviour
     {
         PlayerPrefs.DeleteKey("na_refresh");
         loggedIn = false; token = ""; userName = "";
+        Skins.ClearServer();
+        friends = new NetFriend[0]; friendReqs = new NetFriend[0]; friendSent = new NetFriend[0]; invites.Clear(); friendsLoaded = false;
         Disconnect();
     }
 
@@ -375,7 +389,43 @@ public class Net : MonoBehaviour
     public void Join(string code) { error = ""; status = "Entrando na sala..."; Raw("{\"t\":\"join\",\"code\":\"" + Esc(code.Trim()) + "\",\"side\":" + Settings.side + "}"); }
     public void Leave() { if (InRoom) Raw("{\"t\":\"leave\"}"); ClearRoom(); }
     public void RefreshList() { Raw("{\"t\":\"list\"}"); }
+    // Campanha: pede uma fala por IA para um personagem (o servidor responde com npcline).
+    public void NpcAsk(string who, string ev, string ctx, string say, int id)
+    {
+        Raw("{\"t\":\"npc\",\"who\":\"" + Esc(who) + "\",\"ev\":\"" + Esc(ev) + "\",\"ctx\":\"" + Esc(ctx) + "\",\"say\":\"" + Esc(say) + "\",\"rid\":" + id + "}");
+    }
+
     public void SendAgent() { Raw("{\"t\":\"agent\",\"agent\":" + Settings.agent + "}"); }
+
+    public void Send(string json) { Raw(json); }
+    // Loja e progresso (o servidor confere preco e saldo e devolve o perfil novo).
+    public void Buy(string skin, int w) { Raw("{\"t\":\"buy\",\"skin\":\"" + Esc(skin) + "\",\"w\":" + w + "}"); }
+    public void EquipSkin(string skin, int w) { Raw("{\"t\":\"equip\",\"skin\":\"" + Esc(skin) + "\",\"w\":" + w + "}"); }
+    public void RequestProfile() { Raw("{\"t\":\"profile\"}"); }
+    public void RequestPix(string pack) { Raw("{\"t\":\"pix\",\"pack\":\"" + Esc(pack) + "\"}"); }
+    public void CheckPix(string id) { Raw("{\"t\":\"pixcheck\",\"id\":\"" + Esc(id) + "\"}"); }
+    public NetMsg reward;          // ultima recompensa de partida (tela de fim)
+
+    // Amigos: lista (com quem esta online/em sala), pedidos recebidos e enviados, convites.
+    public NetFriend[] friends = new NetFriend[0], friendReqs = new NetFriend[0], friendSent = new NetFriend[0];
+    public string friendMsg = ""; public bool friendOk; public float friendMsgAt = -99f;
+    public readonly List<NetMsg> invites = new List<NetMsg>();
+    public bool friendsLoaded;
+    public int FriendsOnline { get { int c = 0; foreach (NetFriend f in friends) if (f.st > 0) c++; return c; } }
+    public void AddFriend(string name) { if (name.Trim() == "") return; Raw("{\"t\":\"fadd\",\"name\":\"" + Esc(name.Trim()) + "\"}"); }
+    public void AcceptFriend(string uid) { Raw("{\"t\":\"fok\",\"uid\":\"" + Esc(uid) + "\"}"); }
+    public void RemoveFriend(string uid) { Raw("{\"t\":\"fno\",\"uid\":\"" + Esc(uid) + "\"}"); }
+    public void InviteFriend(string uid) { Raw("{\"t\":\"finv\",\"uid\":\"" + Esc(uid) + "\"}"); }
+    public void RequestFriends() { Raw("{\"t\":\"friends\"}"); }
+    // Aceitar convite: sai da partida atual (se estiver em uma) e entra na sala do amigo.
+    public void AcceptInvite(NetMsg inv)
+    {
+        invites.Remove(inv);
+        if (InRoom && roomCode == inv.code) return;
+        if (InRoom && Game.I != null) Game.I.ToMenu();
+        Join(inv.code);
+    }
+    void FriendNote(string msg, bool ok) { friendMsg = msg; friendOk = ok; friendMsgAt = Time.unscaledTime; }
 
     // Mensagem de jogo: to = -1 host, 0 todos os outros, >0 um jogador.
     public void SendGame(int to, string d) { if (InRoom && !reconnecting) Raw("{\"t\":\"g\",\"to\":" + to + ",\"d\":\"" + Esc(d) + "\"}"); }
@@ -458,6 +508,25 @@ public class Net : MonoBehaviour
                 else if (NetGame.I != null) { NetGame.I.HostCheck(); NetGame.I.RosterChanged(); }
                 break;
             case "g": if (NetGame.I != null && m.d != null) NetGame.I.Receive(m.from, m.d); break;
+            case "profile": Skins.FromServer(m); break;
+            case "reward": reward = m; break;
+            case "shoperr": Skins.ServerError(m.err ?? "Erro."); break;
+            case "pix": Skins.pix = m; Skins.pixPaid = 0; break;
+            case "pixok": Skins.pixPaid = m.shots; break;
+            case "friends":
+                friends = m.fr ?? new NetFriend[0]; friendReqs = m.inc ?? new NetFriend[0]; friendSent = m.sent ?? new NetFriend[0];
+                friendsLoaded = true;
+                break;
+            case "npcline": Campaign.OnReply(m); break;
+            case "fmsg": FriendNote(m.err ?? "", m.ok); break;
+            case "freq": FriendNote(m.name + " quer ser seu amigo.", true); Sfx.UI("pickup", 0.6f); break;
+            case "finvite":
+                invites.RemoveAll(x => x.name == m.name);
+                m.at = Time.unscaledTime;
+                invites.Add(m);
+                if (invites.Count > 3) invites.RemoveAt(0);
+                Sfx.UI("pickup", 0.7f);
+                break;
         }
     }
 

@@ -9,6 +9,8 @@ public static class WeaponArt
     // Onde a mao de apoio segura (para os agentes em terceira pessoa).
     public static readonly Vector3[] Support = { new Vector3(0f, 0.0f, 0.36f), new Vector3(0f, -0.02f, 0.34f), new Vector3(0f, -0.07f, 0.22f), new Vector3(0f, -0.1f, 0.42f), new Vector3(0f, -0.07f, 0.2f) };
     public static readonly Vector3[] Eject = { new Vector3(0.03f, 0.03f, 0.07f), new Vector3(0.03f, 0.03f, 0.05f), Vector3.zero, Vector3.zero, Vector3.zero };
+    public static readonly Vector3 SprintPosOffset = new Vector3(-0.04f, -0.085f, -0.03f);
+    public static readonly Vector3 SprintRotOffset = new Vector3(14f, -22f, 8f);
 
     static Material For(string slot, Color glow)
     {
@@ -32,7 +34,10 @@ public static class WeaponArt
         return Art.Mat(new Color(0.1f, 0.1f, 0.11f), Color.black, 0f, default(Color), 0.6f, 0.5f);
     }
 
-    public static GameObject Part(string name, Transform parent, Color glow)
+    public static GameObject Part(string name, Transform parent, Color glow) { return Part(name, parent, glow, null, 0); }
+
+    // skin (opcional): troca os materiais das pecas pintaveis; vidro da mira e luz do time ficam originais.
+    public static GameObject Part(string name, Transform parent, Color glow, SkinDef skin, int weapon)
     {
         GameObject src = Resources.Load<GameObject>("Weapons/" + name);
         if (src == null)
@@ -48,7 +53,11 @@ public static class WeaponArt
         foreach (Renderer r in g.GetComponentsInChildren<Renderer>())
         {
             Material[] ms = r.sharedMaterials;
-            for (int i = 0; i < ms.Length; i++) ms[i] = For(ms[i] != null ? ms[i].name : "", glow);
+            for (int i = 0; i < ms.Length; i++)
+            {
+                string slot = ms[i] != null ? ms[i].name : "";
+                ms[i] = Skins.MaterialFor(skin, weapon, slot) ?? For(slot, glow);
+            }
             r.sharedMaterials = ms;
             r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
         }
@@ -56,10 +65,17 @@ public static class WeaponArt
         return g;
     }
 
-    public static GameObject Weapon(int index, Transform parent)
+    public static GameObject Weapon(int index, Transform parent) { return Weapon(index, parent, null); }
+
+    // Arma com skin: as de textura usam o mesmo modelo com coordenadas UV (Resources/Weapons/UV_A ou UV_P).
+    public static GameObject Weapon(int index, Transform parent, SkinDef skin)
     {
         index = Mathf.Clamp(index, 0, Names.Length - 1);
-        return Part(Names[index], parent, Weapons.All[index].color);
+        string path = Skins.ModelPath(index, skin);
+        if (path != Names[index] && Resources.Load<GameObject>("Weapons/" + path) == null) path = Names[index];   // sem o modelo UV: original
+        GameObject g = Part(path, parent, Weapons.All[index].color, skin, index);
+        g.name = Names[index];
+        return g;
     }
 
     // Capsula deflagrada saindo da janela de ejecao.

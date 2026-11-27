@@ -105,15 +105,18 @@ public class AgentBody : MonoBehaviour
         // Altura padronizada (hitbox justa: todos entre 1,66 e 1,94 m).
         Renderer[] rs = model.GetComponentsInChildren<Renderer>();
         float top = 0f;
+        bottom = 0f;
         foreach (Renderer r in rs)
         {
             top = Mathf.Max(top, r.bounds.max.y - transform.position.y);
+            bottom = Mathf.Min(bottom, r.bounds.min.y - transform.position.y);
             SkinnedMeshRenderer sk = r as SkinnedMeshRenderer;
             if (sk != null) sk.updateWhenOffscreen = true;
             if (!useNewModel) Tint(r);
         }
         scale = d.height / Mathf.Max(0.5f, top);
         model.transform.localScale = model.transform.localScale * scale;
+        bottom *= scale;
 
         anim = model.GetComponentInChildren<Animator>();
         if (anim == null) anim = model.AddComponent<Animator>();
@@ -168,6 +171,11 @@ public class AgentBody : MonoBehaviour
             Debug.LogWarning("Agente sem animacao humanoide: " + d.file + " avatar=" + (anim.avatar != null ? anim.avatar.isHuman.ToString() : "null"));
             if (useNewModel) SetupProceduralRig();
         }
+
+        // Altura do tornozelo (osso do pe) acima da sola, na pose de referencia: usada para pisar no chao.
+        if (footL != null && footR != null)
+            ankle = d.height * 0.05f;   // osso do tornozelo fica ~5% da altura acima da sola (medida da pose dava errado)
+        toeL = Bone(HumanBodyBones.LeftToes, "LeftToeBase"); toeR = Bone(HumanBodyBones.RightToes, "RightToeBase");
 
         BuildGun();
         if (bands && armL != null && foreL != null)
@@ -350,11 +358,25 @@ public class AgentBody : MonoBehaviour
         g.transform.localScale = new Vector3(w, 0.035f * scale / Mathf.Max(0.0001f, a.lossyScale.x), w);
     }
 
+    public string gunSkin = "";
+
     void BuildGun()
     {
         gun = new GameObject("rifle");
         gun.transform.SetParent(transform, false);
-        WeaponArt.Weapon(0, gun.transform);
+        // Jogador local (e o agente do menu): fuzil com a skin equipada na loja.
+        bool mine = owner == null || owner.isPlayer;
+        gunSkin = mine ? Skins.Equipped(0) : "";
+        WeaponArt.Weapon(0, gun.transform, Skins.Get(gunSkin));
+    }
+
+    // Outro jogador online: troca o fuzil pelo da skin que ele equipou.
+    public void SetGunSkin(string id)
+    {
+        gunSkin = id ?? "";
+        if (gun == null) return;
+        for (int i = gun.transform.childCount - 1; i >= 0; i--) Destroy(gun.transform.GetChild(i).gameObject);
+        WeaponArt.Weapon(0, gun.transform, Skins.Get(gunSkin));
     }
 
     public Vector3 Muzzle { get { return gun != null ? gun.transform.TransformPoint(WeaponArt.Muzzle[0]) : transform.position + Vector3.up * 1.4f; } }
@@ -418,8 +440,51 @@ public class AgentBody : MonoBehaviour
     }
 
     // Depois da animacao: tronco acompanha a mira, arma no ombro, maos na arma.
+    float footOff, ankle = 0.09f, bottom;
+    Transform toeL, toeR;
+    // Ponto mais baixo do pe: tornozelo menos a altura dele, ou a ponta (dedos) quando o calcanhar levanta.
+    float Sole(Transform foot, Transform toe, Vector3 up)
+    {
+        float y = Vector3.Dot(foot.position, up) - ankle;
+        if (toe != null) y = Mathf.Min(y, Vector3.Dot(toe.position, up) - ankle * 0.3f);
+        return y;
+    }
+    static readonly RaycastHit[] hits = new RaycastHit[8];
+
+    // Pes no chao: o controlador de personagem flutua alguns centimetros (skin width) e cada modelo tem
+    // a sola numa altura; depois da animacao, desce/sobe o modelo para o pe mais baixo encostar no chao.
+    void FitFeet()
+    {
+        if (footL == null || footR == null || model == null) return;
+        Vector3 up = transform.up;
+        int n = Physics.RaycastNonAlloc(transform.position + up * 0.6f, -up, hits, 1.4f, ~0, QueryTriggerInteraction.Ignore);
+        float best = float.MaxValue; Vector3 point = Vector3.zero;
+        Transform me = owner != null ? owner.transform : transform;
+        for (int i = 0; i < n; i++)
+        {
+            if (hits[i].collider.transform.IsChildOf(me) || hits[i].distance >= best) continue;
+            best = hits[i].distance; point = hits[i].point;
+        }
+        float target = 0f;
+        if (best < float.MaxValue)
+        {
+            float ground = Vector3.Dot(point, up);
+            float foot = Mathf.Min(Sole(footL, toeL, up), Sole(footR, toeR, up));
+            float delta = ground - foot;
+            target = Mathf.Abs(delta) < 0.45f ? Mathf.Clamp(footOff + delta, -0.3f, 0.12f) : footOff;   // pulando/caindo: mantem
+        }
+        footOff = Mathf.Lerp(footOff, target, 1f - Mathf.Exp(-14f * Time.deltaTime));
+        model.transform.localPosition = new Vector3(0f, footOff, 0f);
+#if UNITY_EDITOR
+        if (!footLogged && Time.time > 6f && best < float.MaxValue) { footLogged = true; Debug.Log("[pes] " + (def != null ? def.name : "?") + " ajuste=" + footOff.ToString("0.000") + " tornozelo=" + ankle.ToString("0.000") + " chao=" + best.ToString("0.00") + " malhaMin=" + MeshMin().ToString("0.000") + " peOsso=" + Mathf.Min(footL.position.y, footR.position.y).ToString("0.000")); }
+#endif
+    }
+    bool footLogged;
+    float MeshMin() { float m = float.MaxValue; foreach (Renderer r in model.GetComponentsInChildren<Renderer>()) if (r is SkinnedMeshRenderer) m = Mathf.Min(m, r.bounds.min.y); return m; }
+
     void LateUpdate()
     {
+        if (dead < 0f && owner != null) FitFeet();
         if (!ok || dead >= 0f) return;
         // Tudo relativo ao "para cima" do proprio agente (no menu ele fica inclinado junto com a camera).
         Vector3 upAxis = transform.up;

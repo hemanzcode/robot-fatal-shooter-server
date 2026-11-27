@@ -24,6 +24,10 @@ public class WeaponDef
     public float projSpeed = 40f;
     public float projRadius = 5.5f;
     public float zoomFov = 65f;
+    public float sprintToFire = 0.38f;
+    public float dropoffStart = 15f;
+    public float dropoffEnd = 40f;
+    public float minDamageMult = 0.5f;
     public Color color;
 }
 
@@ -31,16 +35,21 @@ public static class Weapons
 {
     public static readonly WeaponDef[] All =
     {
-        new WeaponDef { name = "VETOR", sound = "rifle", damage = 25f, headMult = 2f, chestMult = 1.2f, interval = 0.095f, magSize = 30, reserve = 120, reloadTime = 1.9f,
-                        spread = 0.5f, adsSpread = 0.08f, bloom = 0.26f, recoilPitch = 0.55f, recoilYaw = 0.35f, auto = true, zoomFov = 60f, color = Art.Cyan },
-        new WeaponDef { name = "PULSO", sound = "shotgun", damage = 10f, headMult = 1.3f, chestMult = 1.1f, interval = 0.8f, magSize = 6, reserve = 30, reloadTime = 2.3f,
-                        spread = 4.2f, adsSpread = 3.2f, bloom = 0f, recoilPitch = 3.5f, recoilYaw = 1f, pellets = 9, range = 45f, zoomFov = 72f, color = Art.Orange },
-        new WeaponDef { name = "SNIPER", sound = "sniper", damage = 80f, headMult = 2f, chestMult = 1.15f, interval = 1.5f, magSize = 5, reserve = 20, reloadTime = 3.1f,
-                        spread = 3.2f, adsSpread = 0f, bloom = 0f, recoilPitch = 6.5f, recoilYaw = 1.1f, range = 600f, zoomFov = 18f, color = new Color(1f, 0.85f, 0.55f) },
-        new WeaponDef { name = "BAZUCA", sound = "rocket", damage = 90f, interval = 1f, magSize = 3, reserve = 9, reloadTime = 2.8f,
-                        spread = 0.3f, adsSpread = 0.1f, bloom = 0f, recoilPitch = 3f, recoilYaw = 0.5f, projectile = true, projSpeed = 48f, projRadius = 6.5f, zoomFov = 72f, color = new Color(1f, 0.6f, 0.2f) },
-        new WeaponDef { name = "PLASMA", sound = "rail", damage = 35f, headMult = 1.5f, chestMult = 1.15f, interval = 0.15f, magSize = 40, reserve = 160, reloadTime = 2.2f,
-                        spread = 0.6f, adsSpread = 0.2f, bloom = 0.05f, recoilPitch = 0.5f, recoilYaw = 0.3f, auto = true, projectile = true, projSpeed = 75f, projRadius = 1.8f, zoomFov = 65f, color = Art.Green }
+        new WeaponDef { name = "VETOR", sound = "rifle", damage = 26f, headMult = 2f, chestMult = 1.1f, interval = 0.095f, magSize = 30, reserve = 120, reloadTime = 1.9f,
+                        spread = 0.5f, adsSpread = 0.08f, bloom = 0.26f, recoilPitch = 0.55f, recoilYaw = 0.35f, auto = true, zoomFov = 60f,
+                        sprintToFire = 0.35f, dropoffStart = 12f, dropoffEnd = 25f, minDamageMult = 0.55f, color = Art.Cyan },
+        new WeaponDef { name = "PULSO", sound = "shotgun", damage = 8f, headMult = 2f, chestMult = 1.1f, interval = 0.8f, magSize = 6, reserve = 30, reloadTime = 2.3f,
+                        spread = 4.2f, adsSpread = 3.2f, bloom = 0f, recoilPitch = 3.5f, recoilYaw = 1f, pellets = 9, range = 45f, zoomFov = 72f,
+                        sprintToFire = 0.38f, dropoffStart = 6f, dropoffEnd = 20f, minDamageMult = 0.3f, color = Art.Orange },
+        new WeaponDef { name = "SNIPER", sound = "sniper", damage = 80f, headMult = 2f, chestMult = 1.15f, interval = 1.35f, magSize = 5, reserve = 20, reloadTime = 3.1f,
+                        spread = 3.2f, adsSpread = 0f, bloom = 0f, recoilPitch = 6.5f, recoilYaw = 1.1f, range = 600f, zoomFov = 18f,
+                        sprintToFire = 0.45f, dropoffStart = 100f, dropoffEnd = 300f, minDamageMult = 0.85f, color = new Color(1f, 0.85f, 0.55f) },
+        new WeaponDef { name = "BAZUCA", sound = "rocket", damage = 95f, headMult = 2f, interval = 1f, magSize = 3, reserve = 9, reloadTime = 2.8f,
+                        spread = 0.3f, adsSpread = 0.1f, bloom = 0f, recoilPitch = 3f, recoilYaw = 0.5f, projectile = true, projSpeed = 48f, projRadius = 6.5f, zoomFov = 72f,
+                        sprintToFire = 0.45f, dropoffStart = 30f, dropoffEnd = 80f, minDamageMult = 1f, color = new Color(1f, 0.6f, 0.2f) },
+        new WeaponDef { name = "PLASMA", sound = "rail", damage = 30f, headMult = 2f, chestMult = 1.15f, interval = 0.135f, magSize = 40, reserve = 160, reloadTime = 2.2f,
+                        spread = 0.6f, adsSpread = 0.2f, bloom = 0.05f, recoilPitch = 0.5f, recoilYaw = 0.3f, auto = true, projectile = true, projSpeed = 75f, projRadius = 1.8f, zoomFov = 65f,
+                        sprintToFire = 0.40f, dropoffStart = 20f, dropoffEnd = 45f, minDamageMult = 0.6f, color = Art.Green }
     };
 }
 
@@ -83,6 +92,7 @@ public static class Combat
         killed = false;
         dmg = Mathf.Round(dmg);
         if (dmg <= 0f) return false;
+        a.Bleed(point, shooter != null ? point - shooter.EyePos : Vector3.down, dmg, region == 2);
         float removed;
         if (NetGame.IsClient)
         {
@@ -107,6 +117,7 @@ public static class Combat
         int region = Region(a, point);
         float d = Mathf.Round(dmg * (w != null ? RegionMult(region, w.headMult, w.chestMult) : 1f));
         bool mine = owner != null && Game.I != null && owner == Game.I.player;
+        a.Bleed(point, owner != null ? point - owner.EyePos : Vector3.down, d, region == 2);
         if (NetGame.IsClient)
         {
             if (mine) { DamagePopups.Show(point, Mathf.Min(d, Mathf.Ceil(Mathf.Max(0f, a.health))), region); Game.I.Hitmarker(region == 2, false); }
@@ -155,7 +166,6 @@ public static class Combat
                 int region = Region(a, h.point);
                 head = region == 2;
                 float d = dmg * RegionMult(region, headMult, chestMult);
-                Fx.Spark(h.point, h.normal, Color.white);
                 if (batch != null)
                 {
                     Pending p = batch.Find(x => x.a == a);
@@ -169,6 +179,44 @@ public static class Combat
             return false;
         }
         Fx.Spark(h.point, h.normal, c);
+        Breakable.Hit(h.collider, h.point, h.normal, dmg);   // parede da CASA: gasta a placa
+        return false;
+    }
+
+    public static int flybyCount;
+    public static float lastHitDamage;
+    public static float lastHitDistance;
+
+    public static float ApplyDropoff(WeaponDef w, float dist, float dmg)
+    {
+        if (w == null) return dmg;
+        float maxMult = w.pellets > 1 ? 1.5f : 1f;
+        float t = Mathf.InverseLerp(w.dropoffStart, Mathf.Max(w.dropoffStart + 0.01f, w.dropoffEnd), dist);
+        return dmg * Mathf.Lerp(maxMult, w.minDamageMult, t);
+    }
+
+    /// <summary>
+    /// Reproduz estalo supersonico/assobio 3D se um disparo inimigo cruzar a ate 2.0m da camera local sem acertar o jogador.
+    /// </summary>
+    public static bool TryBulletFlyby(Actor shooter, Vector3 start, Vector3 end, bool hitLocalPlayer)
+    {
+        if (hitLocalPlayer || Game.I == null || Game.I.player == null || !Game.I.player.alive) return false;
+        if (shooter == Game.I.player) return false;
+        if (shooter != null && shooter.team == Game.I.player.team) return false;
+        Camera cam = Game.I.pc != null && Game.I.pc.cam != null ? Game.I.pc.cam : Camera.main;
+        if (cam == null) return false;
+        Vector3 camPos = cam.transform.position;
+        Vector3 ab = end - start;
+        float lenSq = ab.sqrMagnitude;
+        if (lenSq < 0.0001f) return false;
+        float t = Mathf.Clamp01(Vector3.Dot(camPos - start, ab) / lenSq);
+        Vector3 closest = start + ab * t;
+        if ((closest - camPos).sqrMagnitude <= 4f) // raio de 2.0m
+        {
+            flybyCount++;
+            Sfx.Flyby(closest);
+            return true;
+        }
         return false;
     }
 
@@ -177,16 +225,23 @@ public static class Combat
         head = false;
         killed = false;
         bool hitEnemy = false;
+        bool hitLocal = false;
         Vector3 end = origin + dir * w.range;
         RaycastHit h;
         if (Physics.Raycast(origin, dir, out h, w.range, ~0, QueryTriggerInteraction.Ignore))
         {
             end = h.point;
-            float d = w.damage * mult;
-            // Pulso: de perto bate muito mais forte (x1,5 ate 6 m), de longe cai para x0,3 no alcance maximo.
-            if (w.pellets > 1) d *= Mathf.Lerp(1.5f, 0.3f, Mathf.InverseLerp(6f, w.range, h.distance));
+            float d = ApplyDropoff(w, h.distance, w.damage * mult);
+            Actor hitActor = ActorOf(h.collider);
+            hitLocal = Game.I != null && hitActor != null && hitActor == Game.I.player;
             hitEnemy = BulletHit(shooter, h, d, w.headMult, w.chestMult, w.name, w.color, out head, out killed);
+            if (shooter != null && Game.I != null && shooter == Game.I.player && hitEnemy)
+            {
+                lastHitDistance = h.distance;
+                lastHitDamage = Mathf.Round(d * RegionMult(head ? 2 : (Region(hitActor, h.point)), w.headMult, w.chestMult));
+            }
         }
+        TryBulletFlyby(shooter, origin, end, hitLocal);
         NetGame.Tracer(shooter, w, muzzle, end);
         bool hot = w.name != "PLASMA";
         Fx.Tracer(muzzle, end, hot ? new Color(1f, 0.82f, 0.45f, 0.8f) : w.color, w.pellets > 1 ? 0.012f : 0.018f, 0.07f);
@@ -213,6 +268,7 @@ public static class Combat
         if (Game.I == null) return;
         bool client = NetGame.IsClient;   // cliente online: o dano e do host; aqui so mostra a previsao do proprio tiro
         if (client && (owner == null || owner != Game.I.player)) return;
+        Breakable.Blast(pos, radius, dmg);   // abre buraco nas paredes da CASA
         if (!client)
         for (int i = Vehicle.All.Count - 1; i >= 0; i--)
         {
@@ -242,6 +298,7 @@ public static class Combat
             if (!self && !enemy) continue;
             float hit = Mathf.Round(dmg * k * (self ? SelfBlast : 1f));
             if (hit <= 0f) continue;
+            a.Bleed(a.ChestPos, to, hit, false);
             if (client)
             {
                 // Previsao: o host aplica a mesma conta.

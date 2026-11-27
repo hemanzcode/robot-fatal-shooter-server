@@ -26,6 +26,7 @@ public static class GameInput
     public static bool Sprint { get { return Input.GetKey(KeyCode.LeftShift) || (TouchPad.On && TouchPad.Move.y > 0.92f); } }
     public static bool JumpHeld { get { return Input.GetKey(KeyCode.Space) || TouchPad.Jump; } }
     public static bool Crouch { get { return Input.GetKey(KeyCode.LeftControl) || TouchPad.Crouch; } }
+    public static bool CrouchToggleDown { get { return Input.GetKeyDown(KeyCode.C); } }
     public static bool Down { get { return Input.GetKey(KeyCode.LeftControl) || TouchPad.Down; } }
     public static bool Use { get { return Input.GetKey(KeyCode.F) || TouchPad.Use; } }
     public static bool UseDown { get { return Input.GetKeyDown(KeyCode.F) || TouchPad.UseDown; } }
@@ -73,6 +74,8 @@ public static class GameInput
     public static bool JumpDown { get { return K != null && K.spaceKey.wasPressedThisFrame; } }
     public static bool Sprint { get { return K != null && K.leftShiftKey.isPressed; } }
     public static bool JumpHeld { get { return K != null && K.spaceKey.isPressed; } }
+    public static bool Crouch { get { return K != null && K.leftCtrlKey.isPressed; } }
+    public static bool CrouchToggleDown { get { return K != null && K.cKey.wasPressedThisFrame; } }
     public static bool Down { get { return K != null && K.leftCtrlKey.isPressed; } }
     public static bool Use { get { return K != null && K.fKey.isPressed; } }
     public static bool UseDown { get { return K != null && K.fKey.wasPressedThisFrame; } }
