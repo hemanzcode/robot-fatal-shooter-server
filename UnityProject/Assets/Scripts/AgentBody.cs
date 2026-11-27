@@ -255,15 +255,15 @@ public class AgentBody : MonoBehaviour
         float leftLift = Mathf.Max(0f, Mathf.Cos(gaitPhase)), rightLift = Mathf.Max(0f, -Mathf.Cos(gaitPhase));
         breath += dt;
         float breathe = Mathf.Sin(breath * 1.35f) * 0.012f;
-        float crouchLean = crouch * 4f;
+        float crouchLean = crouch * 18f;
         float recoil = owner != null ? Mathf.Exp(-Mathf.Max(0f, Time.time - owner.lastShotTime) * 12f) : 0f;
         Vector3 localMove = model.transform.InverseTransformDirection(moveDir);
         Vector3 rightAxis = model.transform.right;
         float stride = move * Mathf.Lerp(16f, 25f, run);
-        RotateFromBind(thighL, bindPose[5], rightAxis, -left * stride);
-        RotateFromBind(thighR, bindPose[6], rightAxis, -right * stride);
-        RotateFromBind(calfL, bindPose[7], rightAxis, leftLift * move * 22f + crouch * 8f + air * 5f);
-        RotateFromBind(calfR, bindPose[8], rightAxis, rightLift * move * 22f + crouch * 8f + air * 5f);
+        RotateFromBind(thighL, bindPose[5], rightAxis, -left * stride - crouch * 72f);
+        RotateFromBind(thighR, bindPose[6], rightAxis, -right * stride - crouch * 72f);
+        RotateFromBind(calfL, bindPose[7], rightAxis, leftLift * move * 22f + crouch * 118f + air * 5f);
+        RotateFromBind(calfR, bindPose[8], rightAxis, rightLift * move * 22f + crouch * 118f + air * 5f);
         RotateFromBind(footL, bindPose[9], rightAxis, -left * move * 10f);
         RotateFromBind(footR, bindPose[10], rightAxis, -right * move * 10f);
         RotateFromBind(spine, bindPose[1], rightAxis, breathe * 45f + move * (1f + run * 1.5f) + crouchLean - recoil * 2.5f);
@@ -379,6 +379,52 @@ public class AgentBody : MonoBehaviour
         WeaponArt.Weapon(0, gun.transform, Skins.Get(gunSkin));
     }
 
+    public void SetWeapon(int idx)
+    {
+        if (gun == null || idx < 0 || idx >= Weapons.All.Length) return;
+        for (int i = gun.transform.childCount - 1; i >= 0; i--) Destroy(gun.transform.GetChild(i).gameObject);
+        string sk = idx == 0 ? gunSkin : Skins.Equipped(idx);
+        WeaponArt.Weapon(idx, gun.transform, Skins.Get(sk));
+    }
+
+    public void SnapPoseNow()
+    {
+        if (model == null || owner == null || footL == null || footR == null) return;
+        if (proceduralRig) UpdateProceduralPose(0.016f);
+        else
+        {
+            float crouch = owner.crouchK * (1f - owner.proneK);
+            if (crouch > 0.01f)
+            {
+                Vector3 rAxis = model.transform.right;
+                if (thighL != null) thighL.rotation = Quaternion.AngleAxis(-72f * crouch, rAxis) * thighL.rotation;
+                if (thighR != null) thighR.rotation = Quaternion.AngleAxis(-72f * crouch, rAxis) * thighR.rotation;
+                if (calfL != null) calfL.rotation = Quaternion.AngleAxis(118f * crouch, rAxis) * calfL.rotation;
+                if (calfR != null) calfR.rotation = Quaternion.AngleAxis(118f * crouch, rAxis) * calfR.rotation;
+                if (footL != null) footL.rotation = Quaternion.AngleAxis(-46f * crouch, rAxis) * footL.rotation;
+                if (footR != null) footR.rotation = Quaternion.AngleAxis(-46f * crouch, rAxis) * footR.rotation;
+                if (spine != null) spine.rotation = Quaternion.AngleAxis(18f * crouch, rAxis) * spine.rotation;
+            }
+        }
+        Vector3 up = transform.up;
+        int n = Physics.RaycastNonAlloc(transform.position + up * 0.6f, -up, hits, 1.4f, ~0, QueryTriggerInteraction.Ignore);
+        float best = float.MaxValue; Vector3 point = Vector3.zero;
+        for (int i = 0; i < n; i++)
+        {
+            if (hits[i].collider.transform.IsChildOf(owner.transform) || hits[i].distance >= best) continue;
+            best = hits[i].distance; point = hits[i].point;
+        }
+        if (best < float.MaxValue)
+        {
+            float ground = Vector3.Dot(point, up);
+            float foot = Mathf.Min(Sole(footL, toeL, up), Sole(footR, toeR, up));
+            float delta = ground - foot;
+            footOff = Mathf.Clamp(footOff + delta, -0.90f, 0.12f);
+            float proneLift = owner.proneK * 0.28f;
+            model.transform.localPosition = new Vector3(0f, footOff + proneLift, 0f);
+        }
+    }
+
     public Vector3 Muzzle { get { return gun != null ? gun.transform.TransformPoint(WeaponArt.Muzzle[0]) : transform.position + Vector3.up * 1.4f; } }
 
     public void Die()
@@ -472,7 +518,7 @@ public class AgentBody : MonoBehaviour
             float ground = Vector3.Dot(point, up);
             float foot = Mathf.Min(Sole(footL, toeL, up), Sole(footR, toeR, up));
             float delta = ground - foot;
-            target = Mathf.Abs(delta) < 0.45f ? Mathf.Clamp(footOff + delta, -0.3f, 0.12f) : footOff;   // pulando/caindo: mantem
+            target = Mathf.Abs(delta) < 0.95f ? Mathf.Clamp(footOff + delta, -0.90f, 0.12f) : footOff;   // pulando/caindo: mantem
         }
         footOff = Mathf.Lerp(footOff, target, 1f - Mathf.Exp(-14f * Time.deltaTime));
         float proneLift = owner != null ? owner.proneK * 0.28f : 0f;
@@ -486,7 +532,22 @@ public class AgentBody : MonoBehaviour
 
     void LateUpdate()
     {
-        if (dead < 0f && owner != null) FitFeet();
+        if (dead < 0f && owner != null)
+        {
+            float crouch = owner.crouchK * (1f - owner.proneK);
+            if (!proceduralRig && crouch > 0.01f)
+            {
+                Vector3 rAxis = model.transform.right;
+                if (thighL != null) thighL.rotation = Quaternion.AngleAxis(-72f * crouch, rAxis) * thighL.rotation;
+                if (thighR != null) thighR.rotation = Quaternion.AngleAxis(-72f * crouch, rAxis) * thighR.rotation;
+                if (calfL != null) calfL.rotation = Quaternion.AngleAxis(118f * crouch, rAxis) * calfL.rotation;
+                if (calfR != null) calfR.rotation = Quaternion.AngleAxis(118f * crouch, rAxis) * calfR.rotation;
+                if (footL != null) footL.rotation = Quaternion.AngleAxis(-46f * crouch, rAxis) * footL.rotation;
+                if (footR != null) footR.rotation = Quaternion.AngleAxis(-46f * crouch, rAxis) * footR.rotation;
+                if (spine != null) spine.rotation = Quaternion.AngleAxis(18f * crouch, rAxis) * spine.rotation;
+            }
+            FitFeet();
+        }
         if (!ok || dead >= 0f) return;
         // Tudo relativo ao "para cima" do proprio agente (no menu ele fica inclinado junto com a camera).
         Vector3 upAxis = transform.up;
@@ -508,7 +569,8 @@ public class AgentBody : MonoBehaviour
         if (head != null) head.rotation = Quaternion.AngleAxis(pitch * 0.35f, right) * head.rotation;
 
         float s = scale > 0.01f ? def.height / 1.8f : 1f;
-        Vector3 g = armR.position + (right * -0.18f + up * -0.15f + fwd * 0.32f) * s;
+        // Alinhada na linha do ombro/bochecha para coincidir com a mira ADS em 1a pessoa (evita cover falso).
+        Vector3 g = armR.position + (right * -0.14f + up * -0.01f + fwd * 0.32f) * s;
         gun.transform.SetPositionAndRotation(g, aimRot);
         gun.transform.localScale = Vector3.one * 1.05f * s;
 

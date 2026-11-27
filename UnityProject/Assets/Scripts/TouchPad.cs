@@ -12,6 +12,7 @@ public class TouchPad : MonoBehaviour
     public static bool Talk;                // segurando FALAR (voz do time)
     public static bool Crouch;              // agachado (toque curto liga/desliga)
     public static bool Prone;               // deitado (toque longo ~0.38s liga/desliga)
+    public static bool SprintLock;          // histerese do sprint no analogico virtual
     public static bool PingTap;            // toque rapido na area de mira: marcar para o time
     public static Vector2 PingPos;         // posicao do toque (pixels de tela)
     float lookStart; Vector2 lookFrom; float lookTravel;
@@ -431,17 +432,32 @@ public class TouchPad : MonoBehaviour
         }
         if (Input.touchCount == 0) { stickId = lookId = fireId = jumpId = useId = downId = aimId = talkId = -1; downLongTriggered = false; }
 #endif
-        // Mira: o toque chega fora do ritmo dos quadros; media de dois quadros tira o tremido.
-        // Na luneta a mira fica mais lenta para o ajuste fino.
-        Vector2 raw = Look * (Aim ? 0.55f : 1f);
-        Look = (raw + lookPrev) * 0.5f;
-        lookPrev = raw;
+        // Curva nao-linear de mira no toque (precisao em micro-arrastes + flick rapido) e suavizacao exponencial por dt (sem lag de 1 frame).
+        float dt = Mathf.Max(Time.unscaledDeltaTime, 0.001f);
+        float mag = Look.magnitude;
+        float accel = mag > 0.0001f ? Mathf.Lerp(0.65f, 1.85f, Mathf.Pow(Mathf.Clamp01(mag / 24f), 1.35f)) : 1f;
+        Vector2 raw = Look * accel * (Aim ? 0.55f : 1f);
+
+        bool useGyro = SystemInfo.supportsGyroscope && Settings.gyroMode > 0 && (Settings.gyroMode == 2 || Aim);
+        if (Input.gyro.enabled != useGyro) Input.gyro.enabled = useGyro;
+        if (useGyro)
+        {
+            Vector3 gr = Input.gyro.rotationRateUnbiased;
+            float gScale = Settings.gyroSens * dt * Mathf.Rad2Deg * 0.35f;
+            raw += new Vector2(-gr.y * gScale, gr.x * gScale);
+        }
+
+        lookPrev = Vector2.Lerp(lookPrev, raw, 1f - Mathf.Exp(-32f * dt));
+        Look = raw.sqrMagnitude > 0.00001f ? Vector2.Lerp(raw, lookPrev, 0.35f) : Vector2.zero;
 
         Vector2 d = stickId >= 0 ? (stickNow - stickStart) / 110f : Vector2.zero;
         d.y = -d.y;
         float m = d.magnitude;
         // Zona morta pequena e resposta suave perto do centro.
         Move = m < 0.12f ? Vector2.zero : d / m * Mathf.Clamp01((m - 0.12f) / 0.88f);
+        if (stickId < 0) SprintLock = false;
+        else if (Move.y > 0.96f && Mathf.Abs(Move.x) < 0.35f) SprintLock = true;
+        else if (Move.y < 0.82f) SprintLock = false;
         if (Move != Vector2.zero) movedOnce = true;
         Fire = fireId >= 0; Jump = jumpId >= 0; Use = useId >= 0; Down = downId >= 0; Talk = talkId >= 0;
         Aim = Settings.aimHold ? aimId >= 0 : aimToggle;
@@ -518,6 +534,7 @@ public class TouchPad : MonoBehaviour
             Vector2 k = stickStart + Vector2.ClampMagnitude(stickNow - stickStart, 110f);
             Round(new Rect(k.x - 48f, k.y - 48f, 96f, 96f), new Color(1f, 1f, 1f, 0.38f), true);
             Round(new Rect(k.x - 48f, k.y - 48f, 96f, 96f), new Color(1f, 0.86f, 0.1f, 0.6f), false);
+            if (SprintLock) Round(new Rect(stickStart.x - 10f, stickStart.y - 118f, 20f, 20f), Art.Yellow, true);
         }
         else if (!movedOnce) Game.Text(60f, 1080f - 260f, 360f, 40f, "arraste aqui para andar", 16, new Color(1f, 1f, 1f, 0.35f), TextAnchor.MiddleLeft);
     }

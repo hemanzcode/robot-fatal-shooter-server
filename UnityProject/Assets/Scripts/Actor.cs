@@ -33,7 +33,7 @@ public class Actor : MonoBehaviour
     public bool prone;
     public float crouchK;
     public float proneK;
-    public float CrouchScale { get { return Mathf.Lerp(1f - 0.33f * crouchK, 0.32f, proneK); } }
+    public float CrouchScale { get { return Mathf.Lerp(1f - 0.42f * crouchK, 0.32f, proneK); } }
     Vector3 modelScale = Vector3.zero;
     CapsuleCollider capCol;
     public System.Action onRespawn;
@@ -79,6 +79,23 @@ public class Actor : MonoBehaviour
         body.aimDir = aimDir;
     }
 
+    public void SnapPosture(bool isCrouching, bool isProne)
+    {
+        prone = isProne;
+        crouching = isCrouching && !isProne;
+        proneK = prone ? 1f : 0f;
+        crouchK = crouching ? 1f : 0f;
+        float standOrCrouchH = Mathf.Lerp(1.8f, 1.05f, crouchK);
+        float hgt = Mathf.Lerp(standOrCrouchH, 0.72f, proneK);
+        if (cc != null) { cc.height = hgt; cc.center = new Vector3(0f, hgt / 2f, 0f); }
+        if (model != null)
+        {
+            if (modelScale == Vector3.zero) modelScale = model.transform.localScale;
+            float sy = Mathf.Lerp(1f, 0.55f, proneK);
+            model.transform.localScale = new Vector3(modelScale.x, modelScale.y * sy, modelScale.z);
+        }
+    }
+
     void ApplyPosture(float dt)
     {
         bool active = alive && vehicle == null && !creature;
@@ -87,7 +104,7 @@ public class Actor : MonoBehaviour
         if (Mathf.Approximately(crouchK, targetCrouch) && Mathf.Approximately(proneK, targetProne)) return;
         crouchK = Mathf.MoveTowards(crouchK, targetCrouch, dt * 7f);
         proneK = Mathf.MoveTowards(proneK, targetProne, dt * 5.5f);
-        float standOrCrouchH = Mathf.Lerp(1.8f, 1.2f, crouchK);
+        float standOrCrouchH = Mathf.Lerp(1.8f, 1.05f, crouchK);
         // cc.radius = 0.35f -> altura minima segura >= 0.70f para nao atravessar o piso.
         float hgt = Mathf.Lerp(standOrCrouchH, 0.72f, proneK);
         if (cc != null) { cc.height = hgt; cc.center = new Vector3(0f, hgt / 2f, 0f); }
@@ -99,7 +116,7 @@ public class Actor : MonoBehaviour
         if (model != null)
         {
             if (modelScale == Vector3.zero) modelScale = model.transform.localScale;
-            float sy = Mathf.Lerp(Mathf.Lerp(1f, 0.7f, crouchK), 0.55f, proneK);
+            float sy = Mathf.Lerp(1f, 0.55f, proneK);
             model.transform.localScale = new Vector3(modelScale.x, modelScale.y * sy, modelScale.z);
         }
     }

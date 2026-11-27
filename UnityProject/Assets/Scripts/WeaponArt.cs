@@ -11,6 +11,8 @@ public static class WeaponArt
     public static readonly Vector3[] Eject = { new Vector3(0.03f, 0.03f, 0.07f), new Vector3(0.03f, 0.03f, 0.05f), Vector3.zero, Vector3.zero, Vector3.zero };
     public static readonly Vector3 SprintPosOffset = new Vector3(-0.04f, -0.085f, -0.03f);
     public static readonly Vector3 SprintRotOffset = new Vector3(14f, -22f, 8f);
+    public static readonly Vector3 HighReadyPosOffset = new Vector3(-0.07f, 0.06f, -0.18f);
+    public static readonly Vector3 HighReadyRotOffset = new Vector3(-52f, 18f, -12f);
 
     static Material For(string slot, Color glow)
     {

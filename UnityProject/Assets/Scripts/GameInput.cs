@@ -23,7 +23,7 @@ public static class GameInput
     public static bool FireDown { get { return TouchPad.On ? TouchPad.FireDown : Input.GetMouseButtonDown(0); } }
     public static bool Aim { get { return TouchPad.On ? TouchPad.Aim : Input.GetMouseButton(1); } }
     public static bool JumpDown { get { return Input.GetKeyDown(KeyCode.Space) || TouchPad.JumpDown; } }
-    public static bool Sprint { get { return Input.GetKey(KeyCode.LeftShift) || (TouchPad.On && TouchPad.Move.y > 0.92f); } }
+    public static bool Sprint { get { return Input.GetKey(KeyCode.LeftShift) || (TouchPad.On && TouchPad.SprintLock); } }
     public static bool JumpHeld { get { return Input.GetKey(KeyCode.Space) || TouchPad.Jump; } }
     public static bool Crouch { get { return Input.GetKey(KeyCode.LeftControl) || TouchPad.Crouch; } }
     public static bool CrouchToggleDown { get { return Input.GetKeyDown(KeyCode.C); } }

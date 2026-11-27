@@ -4,7 +4,7 @@ using UnityEngine;
 public static class Settings
 {
     public static float sensitivity = 2f;
-    public static float fov = 90f;
+    public static float fov = 62f;
     public static float master = 1f;
     public static float music = 0.7f;
     public static float sfx = 0.9f;
@@ -29,6 +29,8 @@ public static class Settings
     public static readonly string[] GfxNames = { "DESEMPENHO", "EQUILIBRADO", "NITIDO" };
     public static float hudAlpha = 0.6f;
     public static bool aimHold;
+    public static int gyroMode = 1;         // 0 = desligado, 1 = so ADS, 2 = sempre
+    public static float gyroSens = 1.0f;
     public static bool voiceOn = true;      // ouvir/falar com o time
     public static float voiceVol = 1f;
     public static string hudLayout = "";
@@ -39,7 +41,7 @@ public static class Settings
     public static void Load()
     {
         sensitivity = PlayerPrefs.GetFloat("na_sens", 2f);
-        fov = PlayerPrefs.GetFloat("na_fov", 90f);
+        fov = PlayerPrefs.GetFloat("na_fov", 62f);
         master = PlayerPrefs.GetFloat("na_master", 1f);
         music = PlayerPrefs.GetFloat("na_music", 0.7f);
         sfx = PlayerPrefs.GetFloat("na_sfx", 0.9f);
@@ -59,6 +61,8 @@ public static class Settings
         gfx = Mathf.Clamp(PlayerPrefs.GetInt("na_gfx", 1), 0, 2);
         hudAlpha = Mathf.Clamp(PlayerPrefs.GetFloat("na_hudalpha", 0.6f), 0.2f, 1f);
         aimHold = PlayerPrefs.GetInt("na_aimhold", 0) == 1;
+        gyroMode = Mathf.Clamp(PlayerPrefs.GetInt("na_gyromode", 1), 0, 2);
+        gyroSens = Mathf.Clamp(PlayerPrefs.GetFloat("na_gyrosens", 1.0f), 0.1f, 3f);
         voiceOn = PlayerPrefs.GetInt("na_voice", 1) == 1;
         voiceVol = Mathf.Clamp01(PlayerPrefs.GetFloat("na_voicevol", 1f));
         hudLayout = PlayerPrefs.GetString("na_hud", "");
@@ -85,6 +89,8 @@ public static class Settings
         PlayerPrefs.SetInt("na_gfx", gfx);
         PlayerPrefs.SetFloat("na_hudalpha", hudAlpha);
         PlayerPrefs.SetInt("na_aimhold", aimHold ? 1 : 0);
+        PlayerPrefs.SetInt("na_gyromode", gyroMode);
+        PlayerPrefs.SetFloat("na_gyrosens", gyroSens);
         PlayerPrefs.SetInt("na_voice", voiceOn ? 1 : 0);
         PlayerPrefs.SetFloat("na_voicevol", voiceVol);
         PlayerPrefs.SetString("na_hud", hudLayout);
