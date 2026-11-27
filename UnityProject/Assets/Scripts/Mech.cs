@@ -1,7 +1,7 @@
 using UnityEngine;
 using System.Collections.Generic;
 
-// MECA de combate (design proprio): robo bipede pesado que cai do ceu com propulsores quando alguem abre
+// MECA de combate (design proprio, "TITAN"): blindado bipede de assalto que cai do ceu com propulsores quando alguem abre
 // a caixa laranja. Luta pelo time de quem abriu: rajadas dos dois canhoes dos bracos e um foguete de vez em quando.
 // Dura 75 s e se autodestroi. Online: o host simula, os clientes so animam a copia.
 public class Mech : MonoBehaviour
@@ -10,7 +10,8 @@ public class Mech : MonoBehaviour
     public Vector3 netVel;
     Actor actor;
     CharacterController cc;
-    Transform hip, torso, armL, armR;
+    Transform hip, torso, armL, armR, gatSpin;
+    float spin;
     readonly Transform[] thigh = new Transform[2], shin = new Transform[2];
     readonly List<GameObject> flames = new List<GameObject>();
     Light jetLight;
@@ -42,6 +43,7 @@ public class Mech : MonoBehaviour
         c.height = 3.2f; c.radius = 0.75f; c.center = new Vector3(0f, 1.6f, 0f); c.stepOffset = 0.5f;
         Actor a = g.AddComponent<Actor>();
         a.creature = true;
+        a.metal = true;
         a.noRespawn = true;
         a.Init("MECA", team, false, 0, false);
         a.maxHealth = a.health = Hp;
@@ -59,91 +61,161 @@ public class Mech : MonoBehaviour
         dieAt = Time.time + 75f;
         nextRocket = Time.time + 4f;
         Color tc = Art.TeamColor(a.team);
-        Material armor = Art.Mat(new Color(0.42f, 0.44f, 0.47f), Color.black, 0f, default(Color), 0.45f, 0.7f);
-        Material dark = Art.Mat(new Color(0.12f, 0.12f, 0.14f), Color.black, 0f, default(Color), 0.5f, 0.6f);
-        Material stripe = Art.Mat(Color.Lerp(tc, Color.white, 0.15f), Color.black, 0f, default(Color), 0.4f, 0.3f);
-        Material glow = Art.Glow(tc, 2.2f);
-        Material hazard = Art.Mat(new Color(0.95f, 0.75f, 0.1f), Color.black, 0f, default(Color), 0.4f, 0.2f);
+        // "TITAN": blindado de assalto (design proprio). Chapas de aco com textura, juntas escuras, faixas do time.
+        Material armor = Art.PbrLocal("Metal032", new Color(1.55f, 1.58f, 1.62f), 1.2f, 0.9f, 0f);
+        Material plate = Art.PbrLocal("DiamondPlate008C", new Color(1.45f, 1.48f, 1.52f), 0.8f, 0.9f, 0f);
+        Material dark = Art.PbrLocal("Metal032", new Color(0.62f, 0.64f, 0.68f), 1.2f, 0.8f, 0f);
+        Material black = Art.Mat(new Color(0.16f, 0.17f, 0.19f), Color.black, 0f, default(Color), 0.5f, 0.4f);
+        Material stripe = Art.Mat(Color.Lerp(tc, Color.white, 0.1f), Color.black, 0f, default(Color), 0.45f, 0.3f);
+        Material glow = Art.Glow(tc, 2.4f);
+        Material hazard = Art.Mat(new Color(0.95f, 0.72f, 0.08f), Color.black, 0f, default(Color), 0.4f, 0.2f);
+        Material chrome = Art.Mat(new Color(0.75f, 0.77f, 0.8f), Color.black, 0f, default(Color), 0.9f, 0.95f);
 
         GameObject vis = new GameObject("vis");
         vis.transform.SetParent(transform, false);
         a.model = vis;
         hip = new GameObject("hip").transform;
         hip.SetParent(vis.transform, false);
-        hip.localPosition = new Vector3(0f, 1.7f, 0f);
-        Art.Box(hip, Vector3.zero, new Vector3(1.1f, 0.4f, 0.8f), dark, false, "pelvis");
+        hip.localPosition = new Vector3(0f, 1.85f, 0f);
+        Art.Box(hip, Vector3.zero, new Vector3(1.0f, 0.42f, 0.75f), dark, false, "pelvis");
+        Art.Box(hip, new Vector3(0f, -0.1f, 0.4f), new Vector3(0.7f, 0.45f, 0.12f), armor, false, "codPlate");
 
-        // Pernas retas e grossas (joelho para a frente), pe largo.
+        // Pernas: coxa larga com placa inclinada, pistao hidraulico ate a canela, pe de dois dedos com espora.
         for (int i = 0; i < 2; i++)
         {
             float sx = i == 0 ? -1f : 1f;
             thigh[i] = new GameObject("thigh").transform;
             thigh[i].SetParent(hip, false);
-            thigh[i].localPosition = new Vector3(sx * 0.62f, -0.05f, 0f);
-            Art.Box(thigh[i], new Vector3(0f, -0.42f, 0f), new Vector3(0.42f, 0.85f, 0.5f), armor, false, "thighArmor");
-            Art.Box(thigh[i], new Vector3(sx * 0.22f, -0.35f, 0f), new Vector3(0.06f, 0.5f, 0.36f), stripe, false, "thighStripe");
+            thigh[i].localPosition = new Vector3(sx * 0.68f, -0.05f, 0f);
+            Art.Prim(PrimitiveType.Sphere, thigh[i], Vector3.zero, new Vector3(0.48f, 0.48f, 0.48f), black, false, "hipJoint");
+            Art.Box(thigh[i], new Vector3(0f, -0.45f, 0f), new Vector3(0.44f, 0.8f, 0.52f), dark, false, "thighCore");
+            GameObject tp = Art.Box(thigh[i], new Vector3(sx * 0.06f, -0.4f, 0.28f), new Vector3(0.52f, 0.85f, 0.12f), armor, false, "thighPlate");
+            tp.transform.localRotation = Quaternion.Euler(-8f, 0f, 0f);
+            Art.Box(thigh[i], new Vector3(sx * 0.27f, -0.4f, 0.05f), new Vector3(0.08f, 0.7f, 0.42f), plate, false, "thighSide");
+            Art.Box(thigh[i], new Vector3(sx * 0.32f, -0.35f, 0.05f), new Vector3(0.02f, 0.5f, 0.1f), stripe, false, "thighStripe");
+            // Pistao atras da coxa (desce ate a canela).
+            Art.Prim(PrimitiveType.Cylinder, thigh[i], new Vector3(0f, -0.55f, -0.32f), new Vector3(0.12f, 0.38f, 0.12f), chrome, false, "piston");
             shin[i] = new GameObject("shin").transform;
             shin[i].SetParent(thigh[i], false);
-            shin[i].localPosition = new Vector3(0f, -0.85f, 0f);
-            Art.Box(shin[i], new Vector3(0f, 0.02f, 0.12f), new Vector3(0.46f, 0.3f, 0.3f), dark, false, "knee");
-            Art.Box(shin[i], new Vector3(0f, -0.4f, 0f), new Vector3(0.36f, 0.8f, 0.44f), armor, false, "shinArmor");
-            Art.Box(shin[i], new Vector3(0f, -0.78f, 0.12f), new Vector3(0.6f, 0.14f, 0.95f), dark, false, "foot");
-            Art.Box(shin[i], new Vector3(0f, -0.74f, 0.55f), new Vector3(0.6f, 0.06f, 0.1f), hazard, false, "toe");
+            shin[i].localPosition = new Vector3(0f, -0.88f, 0f);
+            Art.Prim(PrimitiveType.Sphere, shin[i], Vector3.zero, new Vector3(0.42f, 0.42f, 0.42f), black, false, "kneeJoint");
+            GameObject kp = Art.Box(shin[i], new Vector3(0f, 0.05f, 0.24f), new Vector3(0.5f, 0.42f, 0.16f), armor, false, "kneePad");
+            kp.transform.localRotation = Quaternion.Euler(20f, 0f, 0f);
+            Art.Box(shin[i], new Vector3(0f, -0.42f, 0f), new Vector3(0.38f, 0.78f, 0.42f), dark, false, "shinCore");
+            GameObject sp = Art.Box(shin[i], new Vector3(0f, -0.4f, 0.22f), new Vector3(0.46f, 0.8f, 0.1f), armor, false, "shinPlate");
+            sp.transform.localRotation = Quaternion.Euler(6f, 0f, 0f);
+            Art.Prim(PrimitiveType.Cylinder, shin[i], new Vector3(0f, -0.3f, -0.26f), new Vector3(0.09f, 0.32f, 0.09f), chrome, false, "shinPiston");
+            Art.Box(shin[i], new Vector3(0f, -0.82f, 0f), new Vector3(0.34f, 0.16f, 0.34f), black, false, "ankle");
+            // Dois dedos abertos na frente e espora atras.
+            for (int t = -1; t <= 1; t += 2)
+            {
+                GameObject toe = Art.Box(shin[i], new Vector3(t * 0.16f, -0.86f, 0.36f), new Vector3(0.24f, 0.13f, 0.62f), plate, false, "toe");
+                toe.transform.localRotation = Quaternion.Euler(0f, t * 12f, 0f);
+                Art.Box(shin[i], new Vector3(t * 0.21f, -0.85f, 0.67f), new Vector3(0.22f, 0.08f, 0.06f), hazard, false, "toeTip");
+            }
+            Art.Box(shin[i], new Vector3(0f, -0.87f, -0.3f), new Vector3(0.26f, 0.12f, 0.36f), plate, false, "heel");
         }
 
-        // Tronco quadrado com faixa do time, visor e sensor no topo.
+        // Tronco: casco largo e baixo com chapa frontal inclinada, cabine em cunha com visor estreito,
+        // ombreiras pesadas, aletas de ventilacao, reator do time nas costas e duas chamines.
         torso = new GameObject("torso").transform;
         torso.SetParent(hip, false);
         torso.localPosition = new Vector3(0f, 0.85f, 0f);
-        Art.Box(torso, Vector3.zero, new Vector3(1.5f, 1.05f, 1.15f), armor, false, "chest");
-        Art.Box(torso, new Vector3(0f, -0.1f, 0.6f), new Vector3(1.2f, 0.55f, 0.1f), dark, false, "chestPlate");
-        Art.Box(torso, new Vector3(0f, 0.22f, 0.6f), new Vector3(0.9f, 0.14f, 0.06f), glow, false, "visor");
-        Art.Box(torso, new Vector3(0f, -0.35f, 0.66f), new Vector3(1.0f, 0.08f, 0.03f), stripe, false, "teamStripe");
-        Art.Box(torso, new Vector3(0f, 0f, -0.62f), new Vector3(1.1f, 0.8f, 0.15f), dark, false, "backpack");
-        Art.Prim(PrimitiveType.Sphere, torso, new Vector3(0.35f, 0.62f, 0.15f), new Vector3(0.38f, 0.3f, 0.38f), dark, false, "sensor");
-        Art.Prim(PrimitiveType.Sphere, torso, new Vector3(0.35f, 0.65f, 0.3f), new Vector3(0.14f, 0.1f, 0.14f), glow, false, "sensorEye");
-        Art.Box(torso, new Vector3(-0.35f, 0.6f, 0f), new Vector3(0.04f, 0.7f, 0.04f), dark, false, "antenna");
-        // Lancador de foguetes no ombro esquerdo.
+        Art.Box(torso, new Vector3(0f, 0f, -0.05f), new Vector3(1.55f, 1.0f, 1.2f), dark, false, "hull");
+        GameObject glacis = Art.Box(torso, new Vector3(0f, -0.05f, 0.62f), new Vector3(1.45f, 0.9f, 0.14f), armor, false, "glacis");
+        glacis.transform.localRotation = Quaternion.Euler(-18f, 0f, 0f);
+        Art.Box(torso, new Vector3(0f, 0.48f, 0f), new Vector3(1.6f, 0.12f, 1.25f), armor, false, "deck");
+        Art.Box(torso, new Vector3(0f, -0.38f, 0.73f), new Vector3(1.2f, 0.07f, 0.04f), stripe, false, "teamStripe");
+        for (int v = 0; v < 4; v++) Art.Box(torso, new Vector3(-0.79f, 0.25f - v * 0.14f, -0.05f), new Vector3(0.04f, 0.06f, 0.8f), black, false, "vent");
+        for (int v = 0; v < 4; v++) Art.Box(torso, new Vector3(0.79f, 0.25f - v * 0.14f, -0.05f), new Vector3(0.04f, 0.06f, 0.8f), black, false, "vent");
+        // Cabine em cunha, sem cabeca separada.
+        GameObject cab = Art.Box(torso, new Vector3(0f, 0.62f, 0.32f), new Vector3(0.8f, 0.34f, 0.7f), armor, false, "cockpit");
+        cab.transform.localRotation = Quaternion.Euler(12f, 0f, 0f);
+        Art.Box(torso, new Vector3(0f, 0.6f, 0.7f), new Vector3(0.66f, 0.07f, 0.04f), glow, false, "visor");
+        Art.Box(torso, new Vector3(-0.42f, 0.72f, 0.45f), new Vector3(0.08f, 0.08f, 0.08f), Art.Glow(Art.Red, 2f), false, "lamp");
+        Art.Box(torso, new Vector3(0.42f, 0.72f, 0.45f), new Vector3(0.08f, 0.08f, 0.08f), Art.Glow(Art.Red, 2f), false, "lamp");
+        // Reator nas costas e chamines.
+        Art.Box(torso, new Vector3(0f, 0f, -0.72f), new Vector3(1.0f, 0.75f, 0.25f), plate, false, "backPlate");
+        Art.Prim(PrimitiveType.Cylinder, torso, new Vector3(0f, 0f, -0.86f), new Vector3(0.42f, 0.04f, 0.42f), glow, false, "reactor").transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+        for (int k = -1; k <= 1; k += 2)
+        {
+            Art.Prim(PrimitiveType.Cylinder, torso, new Vector3(k * 0.38f, 0.75f, -0.55f), new Vector3(0.18f, 0.35f, 0.18f), black, false, "stack");
+            Art.Prim(PrimitiveType.Cylinder, torso, new Vector3(k * 0.38f, 1.1f, -0.55f), new Vector3(0.2f, 0.02f, 0.2f), Art.Glow(new Color(1f, 0.45f, 0.1f), 1.2f), false, "stackGlow");
+        }
+        Art.Box(torso, new Vector3(-0.55f, 0.75f, -0.3f), new Vector3(0.03f, 0.9f, 0.03f), black, false, "antenna");
+        // Lancador de misseis no ombro direito (6 tubos).
         Transform pod = new GameObject("pod").transform;
         pod.SetParent(torso, false);
-        pod.localPosition = new Vector3(-0.55f, 0.75f, 0.05f);
-        Art.Box(pod, Vector3.zero, new Vector3(0.55f, 0.4f, 0.7f), armor, false, "podBox");
-        for (int i = 0; i < 4; i++)
-            Art.Box(pod, new Vector3((i % 2 - 0.5f) * 0.22f, ((i / 2) - 0.5f) * 0.17f, 0.36f), new Vector3(0.12f, 0.1f, 0.02f), Art.Glow(Art.Orange, 1.5f), false, "tube");
+        pod.localPosition = new Vector3(0.55f, 0.82f, 0.0f);
+        Art.Box(pod, Vector3.zero, new Vector3(0.62f, 0.42f, 0.8f), armor, false, "podBox");
+        Art.Box(pod, new Vector3(0f, 0.22f, 0f), new Vector3(0.64f, 0.04f, 0.82f), stripe, false, "podStripe");
+        for (int t = 0; t < 6; t++)
+        {
+            Art.Box(pod, new Vector3((t % 3 - 1f) * 0.18f, ((t / 3) - 0.5f) * 0.17f, 0.41f), new Vector3(0.13f, 0.12f, 0.02f), black, false, "tube");
+            Art.Box(pod, new Vector3((t % 3 - 1f) * 0.18f, ((t / 3) - 0.5f) * 0.17f, 0.4f), new Vector3(0.07f, 0.06f, 0.02f), Art.Glow(Art.Orange, 1.3f), false, "tubeTip");
+        }
 
-        // Bracos-canhao (dois canos cada) que acompanham a mira.
+        // Braco esquerdo: canhao pesado de cano duplo com escudo. Braco direito: metralhadora rotativa de 6 canos.
         for (int i = 0; i < 2; i++)
         {
             float sx = i == 0 ? -1f : 1f;
             Transform arm = new GameObject(i == 0 ? "armL" : "armR").transform;
             arm.SetParent(torso, false);
-            arm.localPosition = new Vector3(sx * 1.0f, 0.15f, 0.1f);
-            Art.Box(arm, Vector3.zero, new Vector3(0.45f, 0.5f, 0.55f), dark, false, "shoulder");
-            Art.Box(arm, new Vector3(0f, -0.1f, 0.5f), new Vector3(0.38f, 0.38f, 0.75f), armor, false, "gunBody");
-            for (int b = 0; b < 2; b++)
+            arm.localPosition = new Vector3(sx * 1.18f, 0.1f, 0.35f);
+            GameObject sh = Art.Box(arm, new Vector3(sx * 0.05f, 0.3f, -0.05f), new Vector3(0.62f, 0.3f, 0.8f), armor, false, "pauldron");
+            sh.transform.localRotation = Quaternion.Euler(0f, 0f, -sx * 14f);
+            Art.Box(arm, new Vector3(sx * 0.05f, 0.42f, -0.05f), new Vector3(0.5f, 0.04f, 0.7f), hazard, false, "pauldronStripe");
+            Art.Prim(PrimitiveType.Sphere, arm, Vector3.zero, new Vector3(0.45f, 0.45f, 0.45f), black, false, "shoulderJoint");
+            Art.Box(arm, new Vector3(0f, -0.1f, 0.45f), new Vector3(0.42f, 0.44f, 0.8f), dark, false, "gunBody");
+            if (i == 0)
             {
-                GameObject barrel = Art.Prim(PrimitiveType.Cylinder, arm, new Vector3((b - 0.5f) * 0.16f, -0.1f, 1.05f), new Vector3(0.1f, 0.3f, 0.1f), dark, false, "barrel");
-                barrel.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                for (int bb = 0; bb < 2; bb++)
+                {
+                    GameObject barrel = Art.Prim(PrimitiveType.Cylinder, arm, new Vector3((bb - 0.5f) * 0.18f, -0.1f, 1.08f), new Vector3(0.14f, 0.32f, 0.14f), black, false, "barrel");
+                    barrel.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                    GameObject brake = Art.Prim(PrimitiveType.Cylinder, arm, new Vector3((bb - 0.5f) * 0.18f, -0.1f, 1.38f), new Vector3(0.18f, 0.06f, 0.18f), dark, false, "muzzleBrake");
+                    brake.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                }
+                GameObject shield = Art.Box(arm, new Vector3(-0.26f, -0.12f, 0.55f), new Vector3(0.08f, 0.75f, 0.95f), plate, false, "shield");
+                shield.transform.localRotation = Quaternion.Euler(0f, -6f, 0f);
+                Art.Box(arm, new Vector3(-0.31f, -0.12f, 0.55f), new Vector3(0.02f, 0.08f, 0.8f), stripe, false, "shieldStripe");
+                armL = arm;
             }
-            if (i == 0) armL = arm; else armR = arm;
+            else
+            {
+                Art.Prim(PrimitiveType.Cylinder, arm, new Vector3(0f, -0.1f, 0.9f), new Vector3(0.36f, 0.06f, 0.36f), black, false, "gatMount").transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                gatSpin = new GameObject("gatSpin").transform;
+                gatSpin.SetParent(arm, false);
+                gatSpin.localPosition = new Vector3(0f, -0.1f, 1.2f);
+                for (int bb = 0; bb < 6; bb++)
+                {
+                    float ang = bb * Mathf.PI / 3f;
+                    GameObject barrel = Art.Prim(PrimitiveType.Cylinder, gatSpin, new Vector3(Mathf.Cos(ang) * 0.1f, Mathf.Sin(ang) * 0.1f, 0f), new Vector3(0.07f, 0.3f, 0.07f), black, false, "gatBarrel");
+                    barrel.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                }
+                Art.Prim(PrimitiveType.Cylinder, gatSpin, new Vector3(0f, 0f, 0.22f), new Vector3(0.3f, 0.03f, 0.3f), dark, false, "gatRing").transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                Art.Box(arm, new Vector3(0.24f, -0.05f, 0.45f), new Vector3(0.12f, 0.3f, 0.5f), plate, false, "ammoBox");
+                armR = arm;
+            }
         }
 
         // Propulsores nas costas (acesos so durante a queda).
         for (int i = 0; i < 2; i++)
         {
-            float sx = i == 0 ? -0.32f : 0.32f;
-            Art.Prim(PrimitiveType.Cylinder, torso, new Vector3(sx, -0.25f, -0.75f), new Vector3(0.26f, 0.2f, 0.26f), dark, false, "nozzle");
-            GameObject f = Art.Prim(PrimitiveType.Cylinder, torso, new Vector3(sx, -1.0f, -0.75f), new Vector3(0.2f, 0.6f, 0.2f), Art.Glow(new Color(1f, 0.55f, 0.15f), 3f), false, "flame");
+            float sx = i == 0 ? -0.36f : 0.36f;
+            Art.Prim(PrimitiveType.Cylinder, torso, new Vector3(sx, -0.3f, -0.8f), new Vector3(0.28f, 0.2f, 0.28f), black, false, "nozzle");
+            GameObject f = Art.Prim(PrimitiveType.Cylinder, torso, new Vector3(sx, -1.05f, -0.8f), new Vector3(0.2f, 0.6f, 0.2f), Art.Glow(new Color(1f, 0.55f, 0.15f), 3f), false, "flame");
             flames.Add(f);
         }
-        jetLight = Art.PointLight(torso, new Vector3(0f, -1.2f, -0.8f), new Color(1f, 0.55f, 0.2f), 9f, 2f);
+        jetLight = Art.PointLight(torso, new Vector3(0f, -1.2f, -0.85f), new Color(1f, 0.55f, 0.2f), 9f, 2f);
+        vis.transform.localScale = Vector3.one * 1.08f;
 
         // Corpo atiravel.
         GameObject hb = new GameObject("hitbox");
         hb.transform.SetParent(transform, false);
         BoxCollider box = hb.AddComponent<BoxCollider>();
-        box.center = new Vector3(0f, 2.05f, 0f);
-        box.size = new Vector3(1.7f, 2.5f, 1.3f);
+        box.center = new Vector3(0f, 2.2f, 0f);
+        box.size = new Vector3(1.9f, 2.7f, 1.4f);
         Physics.IgnoreCollision(cc, box, true);
         roam = Arena.RandomPoint();
     }
@@ -163,7 +235,7 @@ public class Mech : MonoBehaviour
 
     static float Flat(Vector3 a, Vector3 b) { float dx = a.x - b.x, dz = a.z - b.z; return Mathf.Sqrt(dx * dx + dz * dz); }
 
-    Vector3 Muzzle(Transform arm) { return arm.TransformPoint(new Vector3(0f, -0.1f, 1.25f)); }
+    Vector3 Muzzle(Transform arm) { return arm.TransformPoint(new Vector3(0f, -0.1f, arm == armL ? 1.45f : 1.4f)); }
 
     void Update()
     {
@@ -262,7 +334,7 @@ public class Mech : MonoBehaviour
         if (Time.time >= nextRocket && dist > 6f)
         {
             nextRocket = Time.time + 7f;
-            Vector3 m = torso.TransformPoint(new Vector3(-0.55f, 0.75f, 0.5f));
+            Vector3 m = torso.TransformPoint(new Vector3(0.55f, 0.82f, 0.5f));
             Combat.Launch(actor, m, (target.ChestPos - m).normalized, 28f, 0f, 45f, 3f, "BAZUCA", Art.Orange, 1f);
             Sfx.At("rocket", m, 1f, 0.8f);
         }
@@ -319,14 +391,17 @@ public class Mech : MonoBehaviour
             thigh[i].localRotation = Quaternion.Euler(-Mathf.Sin(ph) * 24f * amp, 0f, 0f);
             shin[i].localRotation = Quaternion.Euler(Mathf.Max(0f, Mathf.Cos(ph)) * 30f * amp, 0f, 0f);
         }
-        hip.localPosition = new Vector3(0f, 1.7f - Mathf.Abs(Mathf.Cos(phase)) * 0.06f * amp, 0f);
+        hip.localPosition = new Vector3(0f, 1.85f - Mathf.Abs(Mathf.Cos(phase)) * 0.06f * amp, 0f);
         torso.localRotation = Quaternion.Euler(0f, Mathf.Sin(phase) * 4f * amp, Mathf.Sin(phase) * 2f * amp);
         float pitch = 0f;
         if (aim.sqrMagnitude > 0.01f) pitch = Mathf.Clamp(-Mathf.Asin(Mathf.Clamp(aim.normalized.y, -1f, 1f)) * Mathf.Rad2Deg, -35f, 35f);
         recoil = Mathf.MoveTowards(recoil, 0f, dt * 8f);
         Quaternion ar = Quaternion.Euler(pitch, 0f, 0f);
         armL.localRotation = ar; armR.localRotation = ar;
-        armL.localPosition = new Vector3(-1.0f, 0.15f, 0.1f - (side == 0 ? recoil * 0.12f : 0f));
-        armR.localPosition = new Vector3(1.0f, 0.15f, 0.1f - (side == 1 ? recoil * 0.12f : 0f));
+        armL.localPosition = new Vector3(-1.18f, 0.1f, 0.35f - (side == 0 ? recoil * 0.14f : 0f));
+        armR.localPosition = new Vector3(1.18f, 0.1f, 0.35f - (side == 1 ? recoil * 0.06f : 0f));
+        // Metralhadora gira enquanto atira e desacelera depois.
+        spin = Mathf.MoveTowards(spin, burstLeft > 0 || recoil > 0.2f ? 1500f : 0f, dt * 1800f);
+        if (gatSpin != null) gatSpin.Rotate(0f, 0f, spin * dt, Space.Self);
     }
 }

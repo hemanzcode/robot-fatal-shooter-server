@@ -9,6 +9,8 @@ public class MenuVideo : MonoBehaviour
     VideoPlayer vp;
     RenderTexture rt;
     bool failed;
+    int fails;
+    float retryAt;
     float shownAt = -1f, nextPrepare;
 
     public static Texture Tex { get { return inst != null && inst.Ready ? inst.rt : null; } }
@@ -43,13 +45,27 @@ public class MenuVideo : MonoBehaviour
         inst.vp.renderMode = VideoRenderMode.RenderTexture;
         inst.vp.targetTexture = inst.rt;
         inst.vp.skipOnDrop = true;
-        inst.vp.errorReceived += (p, msg) => { inst.failed = true; Debug.LogWarning("MenuVideo: " + msg); };
+        // Erro (servidor dormindo/acordando, rede lenta): tenta de novo em alguns segundos, ate 8 vezes.
+        inst.vp.errorReceived += (p, msg) =>
+        {
+            inst.failed = true; inst.fails++;
+            inst.retryAt = Time.unscaledTime + Mathf.Min(30f, 5f * inst.fails);
+            Debug.LogWarning("MenuVideo (tentativa " + inst.fails + "): " + msg);
+        };
         inst.vp.prepareCompleted += p => Debug.Log("MenuVideo: pronto " + p.width + "x" + p.height);
         inst.vp.Prepare();
     }
 
     void Update()
     {
+        if (failed && fails < 8 && Time.unscaledTime >= retryAt)
+        {
+            failed = false;
+            vp.Stop();
+            vp.url = Url();
+            vp.Prepare();
+            nextPrepare = Time.unscaledTime + 15f;
+        }
         Game g = Game.I;
         bool want = !failed && g != null && g.state == Game.State.Menu;
         if (!want)

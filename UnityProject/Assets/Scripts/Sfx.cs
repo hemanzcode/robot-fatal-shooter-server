@@ -1,7 +1,8 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// Todo o audio e sintetizado por codigo: tiros, explosoes, interface e a trilha ambiente.
+// Tiros e explosoes sao gravacoes reais (Resources/Sfx, CC0: The Free Firearm Sound Library);
+// o resto (interface, mecanica, trilha) e sintetizado por codigo. Sem o arquivo gravado, cai no sintetizado.
 public static class Sfx
 {
     const int SR = 44100;
@@ -43,23 +44,55 @@ public static class Sfx
         float lp = 0f;
         switch (id)
         {
-            case "rifle":
-                return Make(id, 0.2f, t => Noise() * Mathf.Exp(-t * 38f) * 0.7f + Sweep(t, 220f, 60f, 0.2f) * Mathf.Exp(-t * 26f) * 0.6f);
-            case "shotgun":
-                return Make(id, 0.45f, t =>
+            case "startup":
+                // Acorde de abertura quente, sintetico e sem ruido: entrada lenta,
+                // pequena queda de afinacao e cauda longa para soar como um pad.
+                return Make(id, 2.2f, t =>
                 {
-                    lp += (Noise() - lp) * 0.35f;
-                    return lp * Mathf.Exp(-t * 11f) * 1.3f + Sweep(t, 140f, 40f, 0.45f) * Mathf.Exp(-t * 14f) * 0.7f;
+                    float attack = Mathf.SmoothStep(0f, 1f, t / 0.32f);
+                    float release = Mathf.Exp(-Mathf.Max(0f, t - 0.62f) * 1.55f);
+                    float env = attack * release;
+                    float chord = Sweep(t, 73.6f, 72.4f, 2.2f) * 0.30f
+                                + Sweep(t, 146.8f, 144.4f, 2.2f) * 0.28f
+                                + Sweep(t, 174.6f, 171.8f, 2.2f) * 0.22f
+                                + Sweep(t, 220.0f, 216.5f, 2.2f) * 0.18f
+                                + Sweep(t, 293.7f, 289.0f, 2.2f) * 0.10f;
+                    return chord * env * 0.62f;
+                });
+            case "rifle":
+                // 3 camadas: (1) punch grave no peito, (2) estalo mecanico do ferrolho, (3) cauda acustica / eco urbano.
+                return Make(id, 0.42f, t =>
+                {
+                    lp += (Noise() - lp) * 0.42f;
+                    float punch = Sweep(t, 165f, 44f, 0.14f) * Mathf.Exp(-t * 28f) * 0.72f;
+                    float mech = Clack(t, 0.002f, 2400f, 95f, 0.52f) + Noise() * Mathf.Exp(-t * 65f) * 0.45f;
+                    float tail = lp * Mathf.Exp(-t * 15f) * 0.45f
+                               + (t > 0.042f ? lp * Mathf.Exp(-(t - 0.042f) * 11f) * 0.25f : 0f)
+                               + (t > 0.105f ? lp * Mathf.Exp(-(t - 0.105f) * 8f) * 0.16f : 0f);
+                    return punch + mech + tail;
+                });
+            case "shotgun":
+                return Make(id, 0.58f, t =>
+                {
+                    lp += (Noise() - lp) * 0.32f;
+                    float punch = Sweep(t, 130f, 35f, 0.25f) * Mathf.Exp(-t * 16f) * 0.85f;
+                    float mech = Clack(t, 0.003f, 1800f, 75f, 0.55f) + Noise() * Mathf.Exp(-t * 40f) * 0.6f;
+                    float tail = lp * Mathf.Exp(-t * 11f) * 0.65f
+                               + (t > 0.05f ? lp * Mathf.Exp(-(t - 0.05f) * 8.5f) * 0.3f : 0f)
+                               + (t > 0.13f ? lp * Mathf.Exp(-(t - 0.13f) * 6.5f) * 0.18f : 0f);
+                    return punch + mech + tail;
                 });
             case "sniper":
-                // Estampido seco + estrondo grave + eco do disparo no vale.
+                // 3 camadas: punch subgrave + estalo seco do ferrolho + cauda acustica / eco longo.
                 return Make(id, 1.4f, t =>
                 {
-                    lp += (Noise() - lp) * 0.5f;
-                    float crack = Noise() * Mathf.Exp(-t * 70f) * 1.2f;
-                    float boom = Sweep(t, 160f, 38f, 0.5f) * Mathf.Exp(-t * 9f) * 0.9f;
-                    float echo = t > 0.22f ? lp * Mathf.Exp(-(t - 0.22f) * 4.5f) * 0.35f : 0f;
-                    return crack + boom + lp * Mathf.Exp(-t * 14f) * 0.8f + echo;
+                    lp += (Noise() - lp) * 0.48f;
+                    float punch = Sweep(t, 150f, 34f, 0.35f) * Mathf.Exp(-t * 11f) * 0.9f;
+                    float mech = Clack(t, 0.001f, 2900f, 85f, 0.6f) + Noise() * Mathf.Exp(-t * 75f) * 0.85f;
+                    float tail = lp * Mathf.Exp(-t * 12f) * 0.7f
+                               + (t > 0.06f ? lp * Mathf.Exp(-(t - 0.06f) * 6.5f) * 0.35f : 0f)
+                               + (t > 0.20f ? lp * Mathf.Exp(-(t - 0.20f) * 4.5f) * 0.25f : 0f);
+                    return punch + mech + tail;
                 });
             case "heli":
                 // Uma volta de rotor em loop: pulsos de ar das pas + turbina.
@@ -84,15 +117,30 @@ public static class Sfx
             case "rail":
                 return Make(id, 0.7f, t =>
                 {
+                    lp += (Noise() - lp) * 0.38f;
+                    float punch = Sweep(t, 140f, 48f, 0.18f) * Mathf.Exp(-t * 18f) * 0.55f;
                     float s = Sweep(t, 2200f, 180f, 0.7f);
                     float sq = s > 0f ? 0.5f : -0.5f;
-                    return (s * 0.5f + sq * 0.25f) * Mathf.Exp(-t * 6f) + Noise() * Mathf.Exp(-t * 50f) * 0.5f;
+                    float mech = (s * 0.45f + sq * 0.22f) * Mathf.Exp(-t * 7f) + Clack(t, 0.002f, 2800f, 90f, 0.4f);
+                    float tail = lp * Mathf.Exp(-t * 10f) * 0.35f + (t > 0.05f ? lp * Mathf.Exp(-(t - 0.05f) * 7f) * 0.2f : 0f);
+                    return punch + mech + tail;
                 });
             case "rocket":
-                return Make(id, 0.5f, t =>
+                return Make(id, 0.55f, t =>
                 {
-                    lp += (Noise() - lp) * 0.12f;
-                    return lp * Mathf.Exp(-t * 6f) * 1.6f + Sweep(t, 90f, 240f, 0.5f) * Mathf.Exp(-t * 8f) * 0.4f;
+                    lp += (Noise() - lp) * 0.14f;
+                    float punch = Sweep(t, 95f, 36f, 0.28f) * Mathf.Exp(-t * 10f) * 0.75f;
+                    float mech = Clack(t, 0.002f, 1400f, 65f, 0.45f) + Sweep(t, 90f, 240f, 0.5f) * Mathf.Exp(-t * 8f) * 0.4f;
+                    float tail = lp * Mathf.Exp(-t * 6f) * 1.3f;
+                    return punch + mech + tail;
+                });
+            case "flyby":
+                // Estalo supersonico + assobio direcional de bala passando perto (< 2.0m).
+                return Make(id, 0.16f, t =>
+                {
+                    float crack = Clack(t, 0f, 3400f, 110f, 0.55f) + Noise() * Mathf.Exp(-t * 95f) * 0.65f;
+                    float whiz = Sweep(t, 2600f, 680f, 0.14f) * Mathf.Exp(-t * 24f) * 0.55f;
+                    return crack + whiz;
                 });
             case "explosion":
                 return Make(id, 1.1f, t =>
@@ -101,9 +149,9 @@ public static class Sfx
                     return lp * Mathf.Exp(-t * 4f) * 2.2f + Sweep(t, 70f, 30f, 1.1f) * Mathf.Exp(-t * 5f) * 0.8f;
                 });
             case "hit":
-                return Make(id, 0.06f, t => Mathf.Sin(TAU * 1300f * t) * Mathf.Exp(-t * 60f) * 0.6f);
+                return Make(id, 0.06f, t => Noise() * Mathf.Exp(-t * 110f) * 0.5f + Mathf.Sin(TAU * 1150f * t) * Mathf.Exp(-t * 70f) * 0.55f);
             case "headshot":
-                return Make(id, 0.12f, t => (Mathf.Sin(TAU * 1900f * t) + Mathf.Sin(TAU * 2850f * t) * 0.5f) * Mathf.Exp(-t * 35f) * 0.5f);
+                return Make(id, 0.12f, t => (Mathf.Sin(TAU * 2100f * t) * 0.55f + Mathf.Sin(TAU * 3150f * t) * 0.45f) * Mathf.Exp(-t * 45f) + Clack(t, 0.005f, 2600f, 80f, 0.4f));
             case "kill":
                 return Make(id, 0.3f, t => Mathf.Sin(TAU * (t < 0.1f ? 660f : 990f) * t) * Mathf.Exp(-t * 9f) * 0.5f);
             case "hurt":
@@ -120,17 +168,70 @@ public static class Sfx
                 });
             case "pad":
                 return Make(id, 0.4f, t => Sweep(t, 200f, 1200f, 0.4f) * Mathf.Exp(-t * 6f) * 0.45f);
+            case "gate":
+                // Portao de aco: estalo da trava, motor zumbindo enquanto corre e batida no fim.
+                return Make(id, 0.95f, t =>
+                {
+                    lp += (Noise() - lp) * 0.08f;
+                    float latch = Noise() * Mathf.Exp(-t * 90f) * 0.5f + Mathf.Sin(TAU * 1800f * t) * Mathf.Exp(-t * 60f) * 0.25f;
+                    float run = t > 0.05f && t < 0.78f ? (Mathf.Sin(TAU * 92f * t) * 0.22f + Mathf.Sin(TAU * 184f * t) * 0.1f + lp * 0.9f) * Mathf.SmoothStep(0f, 1f, (t - 0.05f) / 0.1f) : 0f;
+                    float te = t - 0.78f;
+                    float thud = te > 0f ? (Noise() * Mathf.Exp(-te * 50f) * 0.6f + Mathf.Sin(TAU * 70f * te) * Mathf.Exp(-te * 18f) * 0.7f) : 0f;
+                    return latch + run + thud;
+                });
             case "pickup":
                 return Make(id, 0.3f, t => Mathf.Sin(TAU * (t < 0.1f ? 523f : (t < 0.2f ? 659f : 784f)) * t) * Mathf.Exp(-t * 6f) * 0.4f);
             case "empty":
-                return Make(id, 0.04f, t => Noise() * Mathf.Exp(-t * 150f) * 0.4f);
+                // Percussor batendo em seco: clique metalico curto.
+                return Make(id, 0.09f, t => (Noise() * Mathf.Exp(-t * 220f) * 0.5f + Mathf.Sin(TAU * 3400f * t) * Mathf.Exp(-t * 90f) * 0.35f + Mathf.Sin(TAU * 5900f * t) * Mathf.Exp(-t * 140f) * 0.2f));
             case "reload":
-                return Make(id, 0.35f, t =>
+                // Tres tempos: carregador sai, carregador entra, ferrolho vai a frente.
+                return Make(id, 1.15f, t =>
                 {
-                    float a = Noise() * Mathf.Exp(-t * 90f) * 0.5f;
-                    float u = t - 0.22f;
-                    float b = u > 0f ? Noise() * Mathf.Exp(-u * 70f) * 0.6f : 0f;
-                    return a + b;
+                    lp += (Noise() - lp) * 0.4f;
+                    float o = Clack(t, 0.00f, 2100f, 60f, 0.5f) + (t < 0.06f ? lp * 0.35f * (1f - t / 0.06f) : 0f);
+                    o += Clack(t, 0.42f, 1500f, 45f, 0.75f) + Clack(t, 0.45f, 3100f, 80f, 0.3f);
+                    o += Clack(t, 0.86f, 2600f, 70f, 0.6f) + Clack(t, 0.93f, 1800f, 50f, 0.85f);
+                    float sl = t - 0.86f;
+                    if (sl > 0f && sl < 0.07f) o += lp * 0.5f * Mathf.Sin(Mathf.PI * sl / 0.07f);
+                    return o;
+                });
+            // Etapas da recarga em primeira pessoa (tocadas no momento certo da animacao).
+            case "magout":
+                return Make(id, 0.22f, t => { lp += (Noise() - lp) * 0.35f; return Clack(t, 0.00f, 2300f, 70f, 0.55f) + (t > 0.02f && t < 0.16f ? lp * 0.28f * Mathf.Sin(Mathf.PI * (t - 0.02f) / 0.14f) : 0f); });
+            case "magin":
+                return Make(id, 0.2f, t => Clack(t, 0.00f, 1500f, 45f, 0.8f) + Clack(t, 0.025f, 3200f, 85f, 0.35f));
+            case "charge":
+                return Make(id, 0.32f, t =>
+                {
+                    lp += (Noise() - lp) * 0.45f;
+                    float o = Clack(t, 0.00f, 2700f, 75f, 0.5f) + Clack(t, 0.17f, 1900f, 50f, 0.9f);
+                    if (t < 0.12f) o += lp * 0.45f * Mathf.Sin(Mathf.PI * t / 0.12f);
+                    return o;
+                });
+            case "shell":
+                return Make(id, 0.14f, t => Clack(t, 0.0f, 2900f, 90f, 0.45f) + Clack(t, 0.05f, 1300f, 60f, 0.5f));
+            case "pump":
+                return Make(id, 0.42f, t =>
+                {
+                    lp += (Noise() - lp) * 0.3f;
+                    float o = Clack(t, 0.00f, 1700f, 55f, 0.7f) + Clack(t, 0.21f, 1400f, 45f, 0.9f);
+                    if (t < 0.09f) o += lp * 0.5f * Mathf.Sin(Mathf.PI * t / 0.09f);
+                    if (t > 0.13f && t < 0.21f) o += lp * 0.5f * Mathf.Sin(Mathf.PI * (t - 0.13f) / 0.08f);
+                    return o;
+                });
+            case "cellout":
+                return Make(id, 0.35f, t => Sweep(t, 900f, 220f, 0.35f) * Mathf.Exp(-t * 7f) * 0.22f + Clack(t, 0.0f, 2600f, 70f, 0.4f));
+            case "cellin":
+                return Make(id, 0.5f, t => Clack(t, 0.0f, 1600f, 50f, 0.7f) + (t > 0.05f ? Sweep(t, 300f, 1500f, 0.5f) * Mathf.Exp(-(t - 0.05f) * 5f) * 0.25f : 0f));
+            case "rocketin":
+                return Make(id, 0.4f, t => { lp += (Noise() - lp) * 0.2f; return (t < 0.25f ? lp * 0.4f * Mathf.Sin(Mathf.PI * t / 0.25f) : 0f) + Clack(t, 0.25f, 900f, 30f, 0.9f); });
+            case "flesh":
+                // Bala entrando na carne: baque abafado e molhado.
+                return Make(id, 0.16f, t =>
+                {
+                    lp += (Noise() - lp) * 0.09f;
+                    return lp * Mathf.Exp(-t * 30f) * 3.2f + Sweep(t, 190f, 70f, 0.16f) * Mathf.Exp(-t * 34f) * 0.6f;
                 });
             case "ult":
                 return Make(id, 0.9f, t => (Sweep(t, 110f, 880f, 0.9f) + Sweep(t, 165f, 1320f, 0.9f) * 0.5f) * Mathf.Sin(Mathf.PI * Mathf.Clamp01(t / 0.9f)) * 0.4f);
@@ -146,6 +247,14 @@ public static class Sfx
                 return BuildRain();
         }
         return Make(id, 0.05f, t => 0f);
+    }
+
+    // Estalo de metal: ruido curto + ressonancia amortecida.
+    static float Clack(float t, float at, float freq, float decay, float amp)
+    {
+        float u = t - at;
+        if (u < 0f) return 0f;
+        return (Noise() * Mathf.Exp(-u * decay * 3f) * 0.6f + Mathf.Sin(TAU * freq * u) * Mathf.Exp(-u * decay) * 0.5f + Mathf.Sin(TAU * freq * 2.37f * u) * Mathf.Exp(-u * decay * 1.6f) * 0.25f) * amp;
     }
 
     static float Saw(float f, float t) { return 2f * ((f * t) % 1f) - 1f; }
@@ -272,23 +381,128 @@ public static class Sfx
         return c;
     }
 
+    // Sons gravados (Resources/Sfx): cada id pode ter variacoes "id_1", "id_2"... sorteadas a cada toque.
+    // Tiros tem tambem a versao "id_far_N", gravada a media distancia, usada quando o disparo esta longe.
+    static readonly Dictionary<string, AudioClip[]> recorded = new Dictionary<string, AudioClip[]>();
+    static readonly Dictionary<string, int> lastPick = new Dictionary<string, int>();
+
+    static AudioClip[] Recorded(string id)
+    {
+        AudioClip[] arr;
+        if (recorded.TryGetValue(id, out arr)) return arr;
+        List<AudioClip> l = new List<AudioClip>();
+        for (int i = 1; i <= 6; i++)
+        {
+            AudioClip c = Resources.Load<AudioClip>("Sfx/" + id + "_" + i);
+            if (c == null) break;
+            l.Add(c);
+        }
+        arr = l.ToArray();
+        recorded[id] = arr;
+        return arr;
+    }
+
+    static AudioClip Pick(string id)
+    {
+        AudioClip[] arr = Recorded(id);
+        if (arr.Length == 0) return Get(id);
+        int k = Random.Range(0, arr.Length), last;
+        // Nunca repete a mesma variacao duas vezes seguidas (rajada soa natural).
+        if (arr.Length > 1 && lastPick.TryGetValue(id, out last) && last == k) k = (k + 1) % arr.Length;
+        lastPick[id] = k;
+        return arr[k];
+    }
+
+    const int PoolSize = 24;
+    static AudioSource[] pool3D;
+    static int poolCursor;
+    static AudioSource uiSource;
+    static GameObject poolRoot;
+
+    static void EnsurePool()
+    {
+        if (poolRoot != null && uiSource != null && pool3D != null) return;
+        poolRoot = new GameObject("SfxPool");
+        if (Application.isPlaying) Object.DontDestroyOnLoad(poolRoot);
+        uiSource = poolRoot.AddComponent<AudioSource>();
+        uiSource.spatialBlend = 0f;
+        uiSource.playOnAwake = false;
+        uiSource.dopplerLevel = 0f;
+
+        pool3D = new AudioSource[PoolSize];
+        for (int i = 0; i < PoolSize; i++)
+        {
+            GameObject child = new GameObject("sfx_3d_" + i);
+            child.transform.SetParent(poolRoot.transform, false);
+            AudioSource a = child.AddComponent<AudioSource>();
+            a.spatialBlend = 1f;
+            a.rolloffMode = AudioRolloffMode.Logarithmic;
+            a.dopplerLevel = 0f;
+            a.playOnAwake = false;
+            pool3D[i] = a;
+        }
+        poolCursor = 0;
+    }
+
+    static AudioSource Acquire3D()
+    {
+        EnsurePool();
+        for (int i = 0; i < PoolSize; i++)
+        {
+            int idx = (poolCursor + i) % PoolSize;
+            if (!pool3D[idx].isPlaying)
+            {
+                poolCursor = (idx + 1) % PoolSize;
+                return pool3D[idx];
+            }
+        }
+        AudioSource fallback = pool3D[poolCursor];
+        poolCursor = (poolCursor + 1) % PoolSize;
+        return fallback;
+    }
+
+    // Carrega as gravacoes logo na abertura, para o primeiro tiro nao engasgar.
+    public static void Warm()
+    {
+        EnsurePool();
+        foreach (string id in new[] { "rifle", "shotgun", "sniper", "rocket", "explosion" }) { Recorded(id); Recorded(id + "_far"); }
+        Get("rifle"); Get("shotgun"); Get("sniper"); Get("rail"); Get("rocket");
+        Get("flyby"); Get("hit"); Get("headshot"); Get("flesh"); Get("reload"); Get("empty");
+    }
+
+    const float FarFrom = 38f;   // metros: daqui em diante toca a gravacao distante
+
     static void Spawn(string id, Vector3 pos, float vol, float pitch, float spatial)
     {
-        AudioClip clip = Get(id);
-        GameObject g = new GameObject("sfx_" + id);
-        g.transform.position = pos;
-        AudioSource a = g.AddComponent<AudioSource>();
+        EnsurePool();
+        bool gun = id == "rifle" || id == "shotgun" || id == "sniper" || id == "rocket" || id == "explosion" || id == "rail";
+        if (spatial > 0f && gun && Camera.main != null && Recorded(id + "_far").Length > 0
+            && (Camera.main.transform.position - pos).sqrMagnitude > FarFrom * FarFrom) id += "_far";
+        AudioClip clip = Pick(id);
+        float finalPitch = pitch * Random.Range(0.95f, 1.05f);
+        float finalVol = vol * Settings.sfx;
+
+        if (spatial <= 0f)
+        {
+            uiSource.pitch = finalPitch;
+            uiSource.PlayOneShot(clip, finalVol);
+            return;
+        }
+
+        AudioSource a = Acquire3D();
+        a.transform.position = pos;
         a.clip = clip;
-        a.volume = vol * Settings.sfx;
-        a.pitch = pitch * Random.Range(0.96f, 1.04f);
-        a.spatialBlend = spatial;
-        a.rolloffMode = AudioRolloffMode.Linear;
-        a.minDistance = 3f;
-        a.maxDistance = 75f;
+        a.volume = finalVol;
+        a.pitch = finalPitch;
+        a.spatialBlend = 1f;
+        a.rolloffMode = AudioRolloffMode.Logarithmic;
+        a.minDistance = id == "flyby" ? 2f : (gun ? 5f : 2.5f);
+        a.maxDistance = id == "flyby" ? 30f : (gun ? 140f : 75f);
+        a.dopplerLevel = 0f;
         a.Play();
-        Object.Destroy(g, clip.length / Mathf.Max(0.1f, a.pitch) + 0.1f);
     }
 
     public static void At(string id, Vector3 pos, float vol = 1f, float pitch = 1f) { Spawn(id, pos, vol, pitch, 1f); }
     public static void UI(string id, float vol = 1f, float pitch = 1f) { Spawn(id, Vector3.zero, vol, pitch, 0f); }
+    public static void Flyby(Vector3 pos) { Spawn("flyby", pos, 0.85f, 1f, 1f); }
 }

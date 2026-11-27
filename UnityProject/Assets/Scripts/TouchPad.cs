@@ -6,6 +6,7 @@
 public class TouchPad : MonoBehaviour
 {
     public static bool On;
+    public static bool ShotDown;           // botao FOTO (captura de tela)
     public static Vector2 Move, Look;
     public static int SelectSlot = -1;   // arma tocada na barra de armas (-1 = nenhuma)
     public static bool Talk;                // segurando FALAR (voz do time)
@@ -361,6 +362,7 @@ public class TouchPad : MonoBehaviour
                 // Pausa e placar (canto superior direito)
                 if (p.y < 110f && p.x > vw - 130f) { PauseDown = true; continue; }
                 if (p.y < 110f && p.x > vw - 270f) { Score = !Score; continue; }
+                if (p.y < 110f && p.x > vw - 400f) { ShotDown = true; continue; }
                 // Barra de armas (centro, em baixo)
                 int slot = SlotAt(p, vw);
                 if (slot >= 0) { SelectSlot = slot; continue; }
@@ -488,6 +490,8 @@ public class TouchPad : MonoBehaviour
         Game.Text(vw - 110f, 20f, 82f, 82f, "II", 28, Color.white, TextAnchor.MiddleCenter);
         Game.Fill(vw - 260f, 20f, 130f, 80f, new Color(0f, 0f, 0f, 0.45f));
         Game.Text(vw - 260f, 20f, 130f, 80f, "PLACAR", 18, Color.white, TextAnchor.MiddleCenter);
+        Game.Fill(vw - 390f, 20f, 120f, 80f, new Color(0f, 0f, 0f, 0.45f));
+        Game.Text(vw - 390f, 20f, 120f, 80f, "FOTO", 18, Color.white, TextAnchor.MiddleCenter);
         if (stickId >= 0)
         {
             Round(new Rect(stickStart.x - 110f, stickStart.y - 110f, 220f, 220f), new Color(1f, 1f, 1f, 0.1f), true);

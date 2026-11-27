@@ -47,6 +47,19 @@ public class AssetImport : AssetPostprocessor
         }
     }
 
+    // Sons gravados (tiros, explosoes): comprimidos, descomprimidos ao carregar para tocar sem atraso.
+    void OnPreprocessAudio()
+    {
+        if (!assetPath.Replace('\\', '/').Contains("/Resources/Sfx/")) return;
+        AudioImporter ai = (AudioImporter)assetImporter;
+        ai.forceToMono = false;
+        AudioImporterSampleSettings st = ai.defaultSampleSettings;
+        st.loadType = AudioClipLoadType.DecompressOnLoad;
+        st.compressionFormat = AudioCompressionFormat.Vorbis;
+        st.quality = 0.6f;
+        ai.defaultSampleSettings = st;
+    }
+
     static bool IsAgent(string path) { return path.Replace('\\', '/').Contains("/Resources/Agents/"); }
 
     // Agentes: esqueleto humanoide (para compartilhar as animacoes de captura de movimento).

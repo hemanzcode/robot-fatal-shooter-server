@@ -41,8 +41,25 @@ mergeInto(LibraryManager.library, {
       else window.prompt('Copie o link da sala:', url);
     };
     var mobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-    if (mobile && navigator.share) navigator.share({ title: 'Robot Fatal Shooter', text: text, url: url }).catch(function () { });
+    if (mobile && navigator.share) navigator.share({ title: 'Fatal Shooter', text: text, url: url }).catch(function () { });
     else copy();
+  },
+  // Foto da tela: baixa o PNG (vai para a pasta Downloads do PC ou do celular).
+  RfsSaveFile: function (ptr, len, namePtr, mimePtr) {
+    var name = UTF8ToString(namePtr), mime = UTF8ToString(mimePtr);
+    var bytes = HEAPU8.slice(ptr, ptr + len);
+    var blob = new Blob([bytes], { type: mime });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = name; a.style.display = 'none';
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { document.body.removeChild(a); URL.revokeObjectURL(url); }, 4000);
+  },
+  // Copia um texto (codigo PIX "copia e cola").
+  RfsCopy: function (textPtr) {
+    var t = UTF8ToString(textPtr);
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).catch(function () { window.prompt('Copie o codigo PIX:', t); });
+    else window.prompt('Copie o codigo PIX:', t);
   },
   // Pixels por ponto da tela (o canvas e redimensionado no proximo quadro).
   RfsSetDpr: function (max) { Module.devicePixelRatio = Math.min(window.devicePixelRatio || 1, max); },

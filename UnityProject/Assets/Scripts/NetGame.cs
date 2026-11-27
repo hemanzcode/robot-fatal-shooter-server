@@ -41,6 +41,7 @@ public class NetPuppet : MonoBehaviour
 public class NetGame : MonoBehaviour
 {
     public static NetGame I;
+    float nextGates;
     public static bool Online { get { return I != null; } }
     public static bool IsHost { get { return I != null && I.host; } }
     public static bool IsClient { get { return I != null && !I.host; } }
@@ -79,6 +80,17 @@ public class NetGame : MonoBehaviour
     }
 
     public Actor ActorById(int id) { Actor a; return byId.TryGetValue(id, out a) ? a : null; }
+
+    // Nivel da conta de um jogador humano (0 = bot ou fora do online).
+    public static int LevelOf(Actor a)
+    {
+        if (I == null || a == null || Net.I == null) return 0;
+        int id = a.isPlayer ? Net.I.myId : 0, x;
+        if (!a.isPlayer && I.ids.TryGetValue(a, out x)) id = x;
+        if (id == 0) return 0;
+        foreach (NetPlayer p in Net.I.players) if (p.id == id) return Mathf.Max(1, p.lvl);
+        return 0;
+    }
 
     public int IdOf(Actor a)
     {
@@ -222,6 +234,7 @@ public class NetGame : MonoBehaviour
     {
         Game g = Game.I;
         if (g == null || Net.I == null || !Net.I.InRoom) return;
+        SyncSkins();
         if (Time.unscaledTime < nextSend) return;
         nextSend = Time.unscaledTime + 1f / 15f;
         if (host) SendSnapshot(g); else SendMine(g);
@@ -287,6 +300,8 @@ public class NetGame : MonoBehaviour
         }
         Net.I.SendGame(0, sb.ToString());
         if (g.bomb != null && Time.unscaledTime >= nextSlow) { nextSlow = Time.unscaledTime + 0.2f; Net.I.SendGame(0, g.bomb.NetState(this)); }
+        // Portoes: reenviados de tempos em tempos para quem entrou depois.
+        if (Gate.All.Count > 0 && Time.unscaledTime >= nextGates) { nextGates = Time.unscaledTime + 2f; SendGates(); }
     }
 
     // ---------------------------- Ganchos chamados pelo jogo ----------------------------
@@ -331,7 +346,51 @@ public class NetGame : MonoBehaviour
     }
 
     public static void BannerAll(string text) { if (IsHost) Net.I.SendGame(0, "N;" + text.Replace(';', ',')); }
-    public static void Ended() { if (IsHost) Net.I.SendGame(0, "E"); }
+    public static void Ended()
+    {
+        if (!IsHost) return;
+        Net.I.SendGame(0, "E");
+        I.SendResult();
+    }
+
+    // Fim de partida: o dono da sala manda o placar ao servidor, que calcula XP e SHOTS de cada conta.
+    void SendResult()
+    {
+        Game g = Game.I;
+        int win = g.score[0] == g.score[1] ? -1 : (g.score[0] > g.score[1] ? 0 : 1);
+        StringBuilder r = new StringBuilder(1024);
+        r.Append("{\"t\":\"result\",\"winner\":").Append(win).Append(",\"players\":[");
+        bool first = true;
+        foreach (Actor a in g.actors)
+        {
+            if (a == null || a.creature || a.metal) continue;
+            int id = 0, x;
+            if (a.isPlayer) id = Net.I.myId;
+            else if (ids.TryGetValue(a, out x) && IsHumanId(x)) id = x;
+            if (!first) r.Append(',');
+            first = false;
+            r.Append("{\"id\":").Append(id).Append(",\"k\":").Append(a.kills).Append(",\"d\":").Append(a.deaths)
+             .Append(",\"hs\":").Append(a.headshots).Append(",\"big\":").Append(a.bigKills).Append(",\"obj\":").Append(a.objectives).Append('}');
+        }
+        r.Append("]}");
+        Net.I.Send(r.ToString());
+    }
+
+    // Skin do fuzil dos outros jogadores (a que cada um equipou na loja), conferida 1 vez por segundo.
+    float nextSkins;
+    void SyncSkins()
+    {
+        if (Time.unscaledTime < nextSkins || Net.I == null) return;
+        nextSkins = Time.unscaledTime + 1f;
+        foreach (NetPlayer p in Net.I.players)
+        {
+            if (p.id == Net.I.myId) continue;
+            Actor a = ActorById(p.id);
+            if (a == null || a.body == null) continue;
+            string want = p.equip != null && p.equip.Length > 0 ? p.equip[0] ?? "" : "";
+            if (a.body.gunSkin != want) a.body.SetGunSkin(want);
+        }
+    }
     // Marcacao para o time: G;time;tipo;idDoAlvo;posicao;nome
     public static void SendPing(int team, int kind, Actor target, Vector3 pos, string who)
     {
@@ -347,6 +406,12 @@ public class NetGame : MonoBehaviour
         Ping.I.Add(PV(a[4]), id != 0 ? ActorById(id) : null, Mathf.Clamp(N(a[2]), 0, 6), a[5]);
     }
 
+    // Portoes (mapa NO GELO): estado de todos, "K;0101...".
+    public static void SendGates() { if (IsHost && Net.I != null) Net.I.SendGame(0, "K;" + Gate.State()); }
+
+    // Paredes da CASA: quem quebrou avisa todos ("W;id;placas"); "W;R" refaz as paredes.
+    public static void SendWalls(string d) { if (I != null && !I.applying && Net.I != null) Net.I.SendGame(0, d); }
+
     public static void OpenCrate() { if (IsClient) Net.I.SendGame(-1, "O"); }
 
     // ---------------------------- Recebimento ----------------------------
@@ -361,6 +426,7 @@ public class NetGame : MonoBehaviour
         {
             if (a[0] == "V") { if (a.Length > 1) VoiceChat.Incoming(from, a[1]); }
             else if (a[0] == "G") ShowPing(g, a);
+            else if (a[0] == "W") Breakable.FromNet(a);
             else if (host) FromClient(g, from, a); else if (from == Net.I.roomHost || a[0] == "T" || a[0] == "L") FromHost(g, from, a);
         }
         finally { applying = false; }
@@ -390,6 +456,14 @@ public class NetGame : MonoBehaviour
             }
             case "T": Trace(a); who.lastShotTime = Time.time; break;
             case "L": Launch(a, true); break;
+            case "K":
+                if (a.Length > 1 && who.alive)
+                {
+                    int gi = N(a[1]);
+                    if (gi >= 0 && gi < Gate.All.Count && Gate.All[gi] != null && (Gate.All[gi].transform.position - who.transform.position).sqrMagnitude < 25f)
+                        Gate.All[gi].Set(!Gate.All[gi].open);
+                }
+                break;
             case "O":
             {
                 SupplyCrate c = SupplyCrate.Near(who.transform.position, 4f);
@@ -416,6 +490,7 @@ public class NetGame : MonoBehaviour
             case "L": Launch(a, false); break;
             case "M": if (a.Length > 2) { Vector3 c = PV(a[1]); g.Announce(a[2], new Color(c.x, c.y, c.z)); } break;
             case "N": if (a.Length > 1) g.Banner(a[1]); break;
+            case "K": if (a.Length > 1) Gate.ApplyState(a[1]); break;
             case "E": g.EndOnline(); break;
             case "B": if (g.bomb != null) g.bomb.ApplyNet(this, a); break;
             case "SP":
@@ -443,6 +518,7 @@ public class NetGame : MonoBehaviour
         if (a.Length < 5) return;
         Vector3 m = PV(a[3]), e = PV(a[4]);
         Fx.Tracer(m, e, a[2] == "1" ? new Color(1f, 0.82f, 0.45f, 0.8f) : Art.Green, 0.018f, 0.07f);
+        Combat.TryBulletFlyby(null, m, e, false);
         Sfx.At(a[1], m, 0.7f);
     }
 

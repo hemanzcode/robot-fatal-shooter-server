@@ -26,7 +26,7 @@ public static class Art
     public static readonly Color Ball = new Color(0.12f, 0.45f, 1f);      // time BALL (azul)
     public static readonly Color Moloch = new Color(1f, 0.13f, 0.1f);    // time MOLOCH (vermelho)
     public static Color TeamColor(int team) { return team == 0 ? Ball : Moloch; }
-    public static string TeamName(int team) { return team == 0 ? "BALL" : "MOLOCH"; }
+    public static string TeamName(int team) { return team == 0 ? "BAAL" : "MOLOCH"; }
 
     // ------------------------------ Texturas procedurais ------------------------------
 

@@ -165,7 +165,7 @@ public class Bot : MonoBehaviour
 
         Vector3 moveDir = Vector3.zero;
         Vector3 lookDir = transform.forward;
-        float speed = 5.6f;
+        float speed = 4.5f;
         bool fighting = target != null && target.alive && targetVisible;
         Fighting = fighting;
 
@@ -184,7 +184,7 @@ public class Bot : MonoBehaviour
                 }
                 moveDir = transform.right * strafeSign;
                 if (dist < prefRange * 0.5f) moveDir -= transform.forward * 0.8f;
-                speed = 4.4f;
+                speed = 3.5f;
             }
             TryFire(to, dist);
         }
@@ -214,7 +214,7 @@ public class Bot : MonoBehaviour
 
         moveDir.y = 0f;
         if (moveDir.sqrMagnitude > 1f) moveDir.Normalize();
-        hvel = Vector3.Lerp(hvel, moveDir * speed, 1f - Mathf.Exp(-10f * dt));
+        hvel = Vector3.Lerp(hvel, moveDir * (speed * actor.MoveSpeedMult), 1f - Mathf.Exp(-10f * dt));
         cc.Move((hvel + Vector3.up * vy + actor.externalVel) * dt);
         Vector3 hv = new Vector3(hvel.x, 0f, hvel.z);
         actor.Animate(hv.magnitude, hv, fighting ? lookDir : transform.forward);

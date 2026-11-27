@@ -19,8 +19,9 @@ public static class Settings
     public static bool tutorialDone;
     public static int agent;
     public static int mode;            // 0 mata-mata, 1 bomba
-    public static int side = 2;        // time preferido: 0 BALL, 1 MOLOCH, 2 automatico
-    public static readonly string[] SideNames = { "BALL (AZUL)", "MOLOCH (VERMELHO)", "AUTOMATICO" };
+    public static int map;             // 0 MERCADO, 1 NO GELO
+    public static int side = 2;        // time preferido: 0 BAAL, 1 MOLOCH, 2 automatico
+    public static readonly string[] SideNames = { "BAAL (AZUL)", "MOLOCH (VERMELHO)", "AUTOMATICO" };
     // Time da partida offline (automatico sorteia).
     public static int ResolveSide() { return side == 2 ? Random.Range(0, 2) : side; }
     // Celular: graficos (0 desempenho, 1 equilibrado, 2 nitido) e controles de toque personalizados.
@@ -53,6 +54,7 @@ public static class Settings
         tutorialDone = PlayerPrefs.GetInt("na_tutdone", 0) == 1;
         agent = Mathf.Clamp(PlayerPrefs.GetInt("na_agent", 0), 0, 11);
         mode = Mathf.Clamp(PlayerPrefs.GetInt("na_mode", 0), 0, 1);
+        map = Mathf.Clamp(PlayerPrefs.GetInt("na_map", 0), 0, 2);
         side = Mathf.Clamp(PlayerPrefs.GetInt("na_side", 2), 0, 2);
         gfx = Mathf.Clamp(PlayerPrefs.GetInt("na_gfx", 1), 0, 2);
         hudAlpha = Mathf.Clamp(PlayerPrefs.GetFloat("na_hudalpha", 0.6f), 0.2f, 1f);
@@ -61,6 +63,7 @@ public static class Settings
         voiceVol = Mathf.Clamp01(PlayerPrefs.GetFloat("na_voicevol", 1f));
         hudLayout = PlayerPrefs.GetString("na_hud", "");
         TouchPad.ReloadLayout();
+        Aim.Load();
     }
 
     public static void Save()
@@ -86,8 +89,10 @@ public static class Settings
         PlayerPrefs.SetFloat("na_voicevol", voiceVol);
         PlayerPrefs.SetString("na_hud", hudLayout);
         PlayerPrefs.SetInt("na_tutdone", tutorialDone ? 1 : 0);
+        Aim.Save();
         PlayerPrefs.SetInt("na_agent", agent);
         PlayerPrefs.SetInt("na_mode", mode);
+        PlayerPrefs.SetInt("na_map", map);
         PlayerPrefs.Save();
     }
 
