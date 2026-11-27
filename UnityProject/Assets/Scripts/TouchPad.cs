@@ -10,10 +10,12 @@ public class TouchPad : MonoBehaviour
     public static Vector2 Move, Look;
     public static int SelectSlot = -1;   // arma tocada na barra de armas (-1 = nenhuma)
     public static bool Talk;                // segurando FALAR (voz do time)
-    public static bool Crouch;              // agachado (toque liga/desliga)
+    public static bool Crouch;              // agachado (toque curto liga/desliga)
+    public static bool Prone;               // deitado (toque longo ~0.38s liga/desliga)
     public static bool PingTap;            // toque rapido na area de mira: marcar para o time
     public static Vector2 PingPos;         // posicao do toque (pixels de tela)
     float lookStart; Vector2 lookFrom; float lookTravel;
+    float downHoldStart; bool downLongTriggered;
     public static bool Fire, FireDown, Aim, Jump, JumpDown, Use, UseDown, ReloadDown, DashDown, GrenadeDown, SecondaryDown, UltDown, PauseDown, Down, NextWeapon, Score;
 
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -284,7 +286,7 @@ public class TouchPad : MonoBehaviour
         // Habilidade recarregando: escurece e mostra os segundos (sobrecarga: porcentagem).
         float cd = Editing ? 0f : Cooldown(b.id);
         string label = b.label;
-        Color keyColor = b.id == "dash" ? Art.Cyan : (b.id == "nade" ? Art.Green : (b.id == "secondary" ? Art.Orange : (b.id == "ult" ? Art.Yellow : Color.white)));
+        Color keyColor = b.id == "dash" ? Art.Cyan : (b.id == "nade" ? Art.Green : (b.id == "secondary" ? Art.Orange : (b.id == "ult" ? Art.Yellow : (b.id == "down" && Prone ? Art.Yellow : (b.id == "down" && Crouch ? Art.Cyan : Color.white)))));
         Color tc = new Color(keyColor.r, keyColor.g, keyColor.b, Mathf.Clamp01(Settings.hudAlpha + 0.35f));
         if (cd > 0.001f)
         {
@@ -349,8 +351,9 @@ public class TouchPad : MonoBehaviour
         if (!On) return;
         if (Editing) { Move = Vector2.zero; Fire = Jump = Use = Down = Aim = false; EditUpdate(); return; }
         bool playing = Game.I != null && Game.I.state != Game.State.Menu && !Game.I.menus.IsOpen && !Game.I.matchOver;
-        if (!playing) { lookPrev = Vector2.zero; stickId = lookId = fireId = jumpId = useId = downId = aimId = talkId = -1; Talk = false; Move = Vector2.zero; Fire = Jump = Use = Down = false; aimToggle = false; Aim = false; return; }
-        if (Game.I.player != null && !Game.I.player.alive) Crouch = false;
+        if (!playing) { lookPrev = Vector2.zero; stickId = lookId = fireId = jumpId = useId = downId = aimId = talkId = -1; downLongTriggered = false; Talk = false; Move = Vector2.zero; Fire = Jump = Use = Down = false; aimToggle = false; Aim = false; return; }
+        if (Game.I.player != null && !Game.I.player.alive) { Crouch = false; Prone = false; }
+        bool inVeh = Game.I.player != null && Game.I.player.vehicle != null;
 #if ENABLE_LEGACY_INPUT_MANAGER
         float s = S, vw = Screen.width / s;
         for (int i = 0; i < Input.touchCount; i++)
@@ -383,8 +386,9 @@ public class TouchPad : MonoBehaviour
                 else if (hit == "talk") talkId = t.fingerId;
                 else if (hit == "down")
                 {
-                    bool inVeh = Game.I.player != null && Game.I.player.vehicle != null;
-                    if (inVeh) downId = t.fingerId; else Crouch = !Crouch;
+                    downId = t.fingerId;
+                    downHoldStart = Time.unscaledTime;
+                    downLongTriggered = false;
                 }
                 else if (p.x < vw * 0.4f && stickId < 0) { stickId = t.fingerId; stickStart = stickNow = p; }
                 else if (lookId < 0) { lookId = t.fingerId; lookStart = Time.unscaledTime; lookFrom = p; lookTravel = 0f; }
@@ -405,12 +409,27 @@ public class TouchPad : MonoBehaviour
                 if (t.fingerId == fireId) fireId = -1;
                 if (t.fingerId == jumpId) jumpId = -1;
                 if (t.fingerId == useId) useId = -1;
-                if (t.fingerId == downId) downId = -1;
+                if (t.fingerId == downId)
+                {
+                    if (!inVeh && !downLongTriggered)
+                    {
+                        if (Prone) { Prone = false; Crouch = true; }
+                        else Crouch = !Crouch;
+                    }
+                    downId = -1;
+                    downLongTriggered = false;
+                }
                 if (t.fingerId == talkId) talkId = -1;
                 if (t.fingerId == aimId) aimId = -1;
             }
         }
-        if (Input.touchCount == 0) stickId = lookId = fireId = jumpId = useId = downId = aimId = talkId = -1;
+        if (downId >= 0 && !inVeh && !downLongTriggered && Time.unscaledTime - downHoldStart >= 0.38f)
+        {
+            Prone = !Prone;
+            if (Prone) Crouch = false;
+            downLongTriggered = true;
+        }
+        if (Input.touchCount == 0) { stickId = lookId = fireId = jumpId = useId = downId = aimId = talkId = -1; downLongTriggered = false; }
 #endif
         // Mira: o toque chega fora do ritmo dos quadros; media de dois quadros tira o tremido.
         // Na luneta a mira fica mais lenta para o ajuste fino.
@@ -460,8 +479,8 @@ public class TouchPad : MonoBehaviour
             Btn b = Buttons[i];
             if (b.id == "talk" && !VoiceChat.Active) continue;
             if (b.id == "secondary" && (Game.I.player == null || !AgentAbilities.HasSecondarySkill(Game.I.player.agent))) continue;
-            bool on = (b.id == "talk" && Talk) || (b.id == "fire" && Fire) || (b.id == "aim" && Aim) || (b.id == "jump" && Jump) || (b.id == "use" && Use) || (b.id == "down" && (veh ? Down : Crouch)) || (b.id == "dash" && DashDown) || (b.id == "nade" && GrenadeDown) || (b.id == "secondary" && SecondaryDown) || (b.id == "ult" && UltDown);
-            if (b.id == "down") b.label = veh ? "DESCE" : "AGACHAR";
+            bool on = (b.id == "talk" && Talk) || (b.id == "fire" && Fire) || (b.id == "aim" && Aim) || (b.id == "jump" && Jump) || (b.id == "use" && Use) || (b.id == "down" && (veh ? Down : (Crouch || Prone))) || (b.id == "dash" && DashDown) || (b.id == "nade" && GrenadeDown) || (b.id == "secondary" && SecondaryDown) || (b.id == "ult" && UltDown);
+            if (b.id == "down") b.label = veh ? "DESCE" : (Prone ? "DEITADO" : (Crouch ? "AGACHADO" : "AGACHAR"));
             DrawBtn(b, on, false);
         }
         // Barra de armas: toque para trocar

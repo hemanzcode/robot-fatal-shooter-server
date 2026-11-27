@@ -248,7 +248,8 @@ public class NetGame : MonoBehaviour
         if (g.player == null || g.pc == null || g.pc.cam == null) return;
         Actor p = g.player;
         float pitch = g.pc.cam.transform.localEulerAngles.x; if (pitch > 180f) pitch -= 360f;
-        Net.I.SendGame(-1, "P;" + V(p.transform.position) + ";" + F(p.transform.eulerAngles.y) + ";" + F(pitch) + ";" + F(p.velocity.x) + ";" + F(p.velocity.z) + ";" + (p.crouching ? 1 : 0));
+        int posture = p.prone ? 2 : (p.crouching ? 1 : 0);
+        Net.I.SendGame(-1, "P;" + V(p.transform.position) + ";" + F(p.transform.eulerAngles.y) + ";" + F(pitch) + ";" + F(p.velocity.x) + ";" + F(p.velocity.z) + ";" + posture);
         bool use = GameInput.Use && !g.menus.IsOpen;
         if (use != lastUse || Time.unscaledTime >= nextSlow) { lastUse = use; nextSlow = Time.unscaledTime + 0.5f; Net.I.SendGame(-1, "U;" + (use ? 1 : 0)); }
     }
@@ -285,7 +286,7 @@ public class NetGame : MonoBehaviour
             first = false;
             sb.Append(IdOf(a)).Append(',').Append(a.team).Append(',').Append(a.isPlayer ? Settings.agent : a.agent).Append(',').Append(kind).Append(',')
               .Append(V1(a.transform.position)).Append(',').Append(Mathf.RoundToInt(yaw)).Append(',').Append(Mathf.RoundToInt(pitch)).Append(',')
-              .Append(F1(a.velocity.x)).Append(',').Append(F1(a.velocity.z)).Append(',').Append(Mathf.CeilToInt(Mathf.Max(0f, a.health))).Append(',').Append(a.alive ? (a.crouching ? 2 : 1) : 0);
+              .Append(F1(a.velocity.x)).Append(',').Append(F1(a.velocity.z)).Append(',').Append(Mathf.CeilToInt(Mathf.Max(0f, a.health))).Append(',').Append(a.alive ? (a.prone ? 3 : (a.crouching ? 2 : 1)) : 0);
             if (full) sb.Append(',').Append(a.kills).Append(',').Append(a.deaths).Append(',').Append(a.isPlayer ? Net.I.userName : a.displayName);
         }
         sb.Append(';');
@@ -403,7 +404,7 @@ public class NetGame : MonoBehaviour
     {
         if (a.Length < 6 || Ping.I == null || g.player == null || N(a[1]) != g.player.team) return;
         int id = N(a[3]);
-        Ping.I.Add(PV(a[4]), id != 0 ? ActorById(id) : null, Mathf.Clamp(N(a[2]), 0, 6), a[5]);
+        Ping.I.Add(PV(a[4]), id != 0 ? ActorById(id) : null, Mathf.Clamp(N(a[2]), 0, 7), a[5]);
     }
 
     // Portoes (mapa NO GELO): estado de todos, "K;0101...".
@@ -443,6 +444,7 @@ public class NetGame : MonoBehaviour
                 if (np == null || a.Length < 6 || Time.time < np.holdUntil) break;
                 np.pos = PV(a[1]); np.yaw = P(a[2]); np.pitch = P(a[3]); np.vel = new Vector3(P(a[4]), 0f, P(a[5]));
                 who.crouching = a.Length > 6 && a[6] == "1";
+                who.prone = a.Length > 6 && a[6] == "2";
                 break;
             case "U": if (np != null && a.Length > 1) np.use = a[1] == "1"; break;
             case "H":
@@ -570,6 +572,7 @@ public class NetGame : MonoBehaviour
                 if (full) { act.kills = N(r[13]); act.deaths = N(r[14]); if (act.displayName != r[15]) act.displayName = r[15]; }
                 act.NetState(hp, alive, true);
                 act.crouching = r[12] == "2";
+                act.prone = r[12] == "3";
             }
         }
         // Quem nao veio na foto saiu da partida.

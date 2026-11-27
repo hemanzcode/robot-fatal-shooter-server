@@ -28,10 +28,12 @@ public class Actor : MonoBehaviour
     public Vehicle vehicle;        // veiculo que esta pilotando
     public CharacterController cc;
     public GameObject model;
-    // Agachado: capsula mais baixa, modelo encolhido e cabeca/peito mais baixos para tiros e mira.
+    // Agachado / deitado: capsula mais baixa, modelo ajustado e cabeca/peito mais baixos para tiros e mira.
     public bool crouching;
+    public bool prone;
     public float crouchK;
-    public float CrouchScale { get { return 1f - 0.33f * crouchK; } }
+    public float proneK;
+    public float CrouchScale { get { return Mathf.Lerp(1f - 0.33f * crouchK, 0.32f, proneK); } }
     Vector3 modelScale = Vector3.zero;
     CapsuleCollider capCol;
     public System.Action onRespawn;
@@ -77,12 +79,17 @@ public class Actor : MonoBehaviour
         body.aimDir = aimDir;
     }
 
-    void ApplyCrouch(float dt)
+    void ApplyPosture(float dt)
     {
-        float target = crouching && alive && vehicle == null && !creature ? 1f : 0f;
-        if (crouchK == target) return;
-        crouchK = Mathf.MoveTowards(crouchK, target, dt * 7f);
-        float hgt = Mathf.Lerp(1.8f, 1.2f, crouchK);
+        bool active = alive && vehicle == null && !creature;
+        float targetProne = active && prone ? 1f : 0f;
+        float targetCrouch = active && crouching && !prone ? 1f : 0f;
+        if (Mathf.Approximately(crouchK, targetCrouch) && Mathf.Approximately(proneK, targetProne)) return;
+        crouchK = Mathf.MoveTowards(crouchK, targetCrouch, dt * 7f);
+        proneK = Mathf.MoveTowards(proneK, targetProne, dt * 5.5f);
+        float standOrCrouchH = Mathf.Lerp(1.8f, 1.2f, crouchK);
+        // cc.radius = 0.35f -> altura minima segura >= 0.70f para nao atravessar o piso.
+        float hgt = Mathf.Lerp(standOrCrouchH, 0.72f, proneK);
         if (cc != null) { cc.height = hgt; cc.center = new Vector3(0f, hgt / 2f, 0f); }
         else
         {
@@ -92,14 +99,15 @@ public class Actor : MonoBehaviour
         if (model != null)
         {
             if (modelScale == Vector3.zero) modelScale = model.transform.localScale;
-            model.transform.localScale = new Vector3(modelScale.x, modelScale.y * Mathf.Lerp(1f, 0.7f, crouchK), modelScale.z);
+            float sy = Mathf.Lerp(Mathf.Lerp(1f, 0.7f, crouchK), 0.55f, proneK);
+            model.transform.localScale = new Vector3(modelScale.x, modelScale.y * sy, modelScale.z);
         }
     }
 
     void Update()
     {
         float dt = Mathf.Max(Time.deltaTime, 0.0001f);
-        ApplyCrouch(dt);
+        ApplyPosture(dt);
         velocity = (transform.position - lastPos) / dt;
         lastPos = transform.position;
         float damp = (cc != null && cc.enabled && cc.isGrounded) ? 8f : 2.5f;

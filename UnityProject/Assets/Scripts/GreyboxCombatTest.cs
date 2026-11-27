@@ -47,6 +47,25 @@ public class GreyboxCombatTest : MonoBehaviour
         shooterActor = SpawnActor("ATIRADOR_TESTE", 1, false, new Vector3(6.5f, 0f, 18f), 200f, 1);
         shooterActor.maxHealth = shooterActor.health = 100f;
         nextShooterFire = Time.time + 1.5f;
+
+        // Garante muro de 1.50m (bloqueio de Auto-Vault) e drone hostil de teste para Ping contextual
+        if (GameObject.Find("HighWall_1_50m") == null)
+        {
+            GameObject hw = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            hw.name = "HighWall_1_50m";
+            hw.transform.position = new Vector3(3.8f, 0.75f, 7.5f);
+            hw.transform.localScale = new Vector3(3.2f, 1.50f, 0.45f);
+        }
+        if (GameObject.Find("DroneHostil_Teste") == null)
+        {
+            GameObject dr = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            dr.name = "DroneHostil_Teste";
+            dr.transform.position = new Vector3(-4.5f, 3.2f, 16f);
+            dr.transform.localScale = new Vector3(0.7f, 0.35f, 0.7f);
+            dr.GetComponent<Renderer>().sharedMaterial = Art.Glow(new Color(1f, 0.3f, 0.8f), 1.6f);
+            HostileDroneMarker m = dr.AddComponent<HostileDroneMarker>();
+            m.team = 1;
+        }
     }
 
     Actor SpawnActor(string label, int team, bool isPlayer, Vector3 pos, float yaw, int agentIdx)
@@ -142,24 +161,30 @@ public class GreyboxCombatTest : MonoBehaviour
         Actor p = Game.I.player;
         float speed = pc.CurrentHorizontalVel.magnitude;
         float tagRem = Mathf.Max(0f, p.taggedUntil - Time.time);
+        string posture = p.prone ? "DEITADO (PRONE)" : (p.crouching ? "AGACHADO" : "EM PE");
+        string pingTxt = (Ping.I != null && !string.IsNullOrEmpty(Ping.I.lastRadioText)) ? Ping.I.lastRadioText : "-";
         string text = string.Format(
             "GREYBOX COMBAT TEST (FOV {0:0})\n" +
             "Vel Horizontal: {1:0.00} m/s  |  Sprint: {2}  |  ADS: {3}\n" +
-            "Tagging (-35%): {4}  |  Sprint-to-Fire Delay: {5:0.000}s\n" +
-            "Ultimo Acerto: {6:0} dmg @ {7:0.0}m  |  Ultimo TTK: {8}\n" +
-            "Bullet Flybys (<2.0m): {9}  |  [T] Modo Atirador: {10}",
+            "Postura: {4} (H:{5:0.00}m)  |  Lean: {6:0.00}  |  Peek: {7:0.00}  |  Vault: {8}\n" +
+            "Tagging (-35%): {9}  |  Ultimo Radio/Ping: {10}\n" +
+            "Ultimo Acerto: {11:0} dmg @ {12:0.0}m  |  Bullet Flybys: {13}  |  [T] Modo: {14}",
             pc.cam != null ? pc.cam.fieldOfView : 62f,
             speed,
             pc.isSprinting ? "SIM" : "NAO",
             pc.ads ? "SIM" : "NAO",
+            posture,
+            p.cc != null ? p.cc.height : 1.8f,
+            pc.leanK,
+            pc.peekK,
+            pc.isVaulting ? "SIM" : "NAO",
             tagRem > 0f ? ("ATIVO (" + tagRem.ToString("0.00") + "s)") : "INATIVO",
-            pc.lastSprintToFireDelay,
+            pingTxt,
             Combat.lastHitDamage,
             Combat.lastHitDistance,
-            lastMeasuredTTK > 0f ? (lastMeasuredTTK.ToString("0.000") + "s") : "-",
             Combat.flybyCount,
-            shooterDirectHitMode ? "TAGGING (acerto direto)" : "FLYBY (passando <2m)"
+            shooterDirectHitMode ? "TAGGING" : "FLYBY"
         );
-        GUI.Box(new Rect(18f, 18f, 520f, 128f), text, boxStyle);
+        GUI.Box(new Rect(18f, 18f, 580f, 134f), text, boxStyle);
     }
 }

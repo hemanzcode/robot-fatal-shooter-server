@@ -21,9 +21,13 @@ public class PlayerController : MonoBehaviour
     public const float SprintSpeed = 7.6f;   // 9.5f - 20%
     public const float AdsSpeed = 3.2f;      // 4.0f - 20%
     public const float CrouchSpeed = 2.56f;  // 3.2f - 20%
+    public const float ProneSpeed = 1.45f;
     public const float AccelTime = 0.15f;
     public const float DecelTime = 0.12f;
     public bool isSprinting;
+    public float leanK { get; private set; }
+    public float peekK { get; private set; }
+    public bool isVaulting { get; private set; }
     public float sprintFireReady;
     public float lastSprintToFireDelay;
     public Vector3 CurrentHorizontalVel { get { return hvel; } }
@@ -65,6 +69,22 @@ public class PlayerController : MonoBehaviour
     float sprintCancelTime = -10f;
     float sprintBlockUntil;
     bool crouchToggle;
+    bool proneToggle;
+    float vaultT, vaultCooldownUntil;
+    Vector3 vaultStart, vaultPeak, vaultEnd;
+    static readonly RaycastHit[] probeHits = new RaycastHit[16];
+    const float LeanProbeDist = 1.0f;
+    const float LeanMaxOffset = 0.40f;
+    const float LeanMaxRoll = 11f;
+    const float PeekMaxOffset = 0.40f;
+    const float VaultMaxHeight = 1.15f;
+    const float VaultDuration = 0.36f;
+    const float VaultCooldown = 0.45f;
+    static readonly float[] WeaponWeights = { 1.00f, 1.08f, 1.24f, 1.32f, 1.12f };
+    float WeaponWeight { get { return (cur >= 0 && cur < WeaponWeights.Length) ? WeaponWeights[cur] : 1f; } }
+    bool wasGrounded = true;
+    float prevVy, landDip, strafeTilt;
+    Vector2 swayLag;
     float lastShotTime = -10f;
     int reloadShells;
     GameObject[] vms;
@@ -124,6 +144,16 @@ public class PlayerController : MonoBehaviour
         sprintFireReady = 0f;
         sprintBlockUntil = 0f;
         crouchToggle = false;
+        proneToggle = false;
+        leanK = 0f;
+        peekK = 0f;
+        isVaulting = false;
+        wasGrounded = true;
+        prevVy = 0f;
+        landDip = 0f;
+        strafeTilt = 0f;
+        swayLag = Vector2.zero;
+        if (cc != null && !cc.enabled) cc.enabled = true;
         sprintK = 0f;
         jetFuel = 0f;
         vehYaw = 0f; vehPitch = 0f;
@@ -378,6 +408,9 @@ public class PlayerController : MonoBehaviour
         yaw += lk.x;
         pitch = Mathf.Clamp(pitch - lk.y, -88f, 88f);
         stats.look += Mathf.Abs(lk.x) + Mathf.Abs(lk.y);
+        float swayScale = ads ? 0.35f : 1f;
+        Vector2 targetSway = new Vector2(Mathf.Clamp(-lk.x * 0.008f, -0.025f, 0.025f), Mathf.Clamp(-lk.y * 0.008f, -0.025f, 0.025f)) * swayScale;
+        swayLag = Vector2.Lerp(swayLag, targetSway, 1f - Mathf.Exp(-14f * Time.deltaTime));
         recoilOffset = Mathf.Lerp(recoilOffset, 0f, 1f - Mathf.Exp(-7f * Time.deltaTime));
         // Luneta: a mira balanca com a respiracao; SHIFT prende o folego por alguns segundos.
         float swayX = 0f, swayY = 0f;
@@ -385,13 +418,16 @@ public class PlayerController : MonoBehaviour
         {
             bool holding = GameInput.Sprint && breath < 4f;
             breath = holding ? breath + Time.deltaTime : Mathf.Max(0f, breath - Time.deltaTime * 0.7f);
-            float amp = (holding ? 0.06f : 0.42f) * (cc.isGrounded ? 1f : 2.5f) + Mathf.Clamp01(new Vector3(hvel.x, 0f, hvel.z).magnitude / 4f) * 0.5f;
+            float amp = (holding ? 0.06f : 0.42f) * (cc.isGrounded ? 1f : 2.5f) * (actor.proneK > 0.5f ? 0.35f : 1f) + Mathf.Clamp01(new Vector3(hvel.x, 0f, hvel.z).magnitude / 4f) * 0.5f;
             swayX = Mathf.Sin(Time.time * 1.15f) * amp + Mathf.Sin(Time.time * 2.7f) * amp * 0.3f;
             swayY = Mathf.Sin(Time.time * 0.83f + 1f) * amp * 0.8f;
         }
         else breath = Mathf.Max(0f, breath - Time.deltaTime);
         transform.rotation = Quaternion.Euler(0f, yaw, 0f);
-        cam.transform.localRotation = Quaternion.Euler(Mathf.Clamp(pitch - recoilOffset + swayY, -89f, 89f), swayX, 0f);
+        Vector3 localVel = transform.InverseTransformDirection(hvel);
+        float wantTilt = Mathf.Clamp(-localVel.x / SprintSpeed, -1f, 1f) * 1.6f * (ads ? 0.45f : 1f);
+        strafeTilt = Mathf.Lerp(strafeTilt, wantTilt, 1f - Mathf.Exp(-10f * Time.deltaTime));
+        cam.transform.localRotation = Quaternion.Euler(Mathf.Clamp(pitch - recoilOffset + swayY, -89f, 89f), swayX, -leanK * LeanMaxRoll + strafeTilt);
     }
 
     // ---------------------------- Assistencia de mira ----------------------------
@@ -465,28 +501,214 @@ public class PlayerController : MonoBehaviour
         return lk;
     }
 
+    bool WorldSphereProbe(Vector3 origin, float radius, Vector3 dir, float dist, out RaycastHit bestHit)
+    {
+        bestHit = default(RaycastHit);
+        int n = Physics.SphereCastNonAlloc(origin, radius, dir, probeHits, dist, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        float best = float.MaxValue;
+        bool found = false;
+        for (int i = 0; i < n; i++)
+        {
+            Collider col = probeHits[i].collider;
+            if (col == null || col.gameObject.layer == 2 || col.GetComponentInParent<Actor>() != null) continue;
+            if (probeHits[i].distance < best)
+            {
+                best = probeHits[i].distance;
+                bestHit = probeHits[i];
+                found = true;
+            }
+        }
+        return found;
+    }
+
+    bool WorldRayProbe(Vector3 origin, Vector3 dir, float dist, out RaycastHit bestHit)
+    {
+        bestHit = default(RaycastHit);
+        int n = Physics.RaycastNonAlloc(origin, dir, probeHits, dist, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        float best = float.MaxValue;
+        bool found = false;
+        for (int i = 0; i < n; i++)
+        {
+            Collider col = probeHits[i].collider;
+            if (col == null || col.gameObject.layer == 2 || col.GetComponentInParent<Actor>() != null) continue;
+            if (probeHits[i].distance < best)
+            {
+                best = probeHits[i].distance;
+                bestHit = probeHits[i];
+                found = true;
+            }
+        }
+        return found;
+    }
+
+    void UpdateAutoLean(float dt, Vector2 mv)
+    {
+        float targetLean = 0f;
+        float targetPeek = 0f;
+        if (ads && !actor.prone && !isVaulting && cc.isGrounded)
+        {
+            Vector3 chest = transform.position + Vector3.up * (1.25f * actor.CrouchScale);
+            bool centerBlocked = WorldSphereProbe(chest, 0.14f, transform.forward, LeanProbeDist, out _);
+            bool leftBlocked = WorldSphereProbe(chest - transform.right * 0.48f, 0.12f, transform.forward, 1.35f, out _);
+            bool rightBlocked = WorldSphereProbe(chest + transform.right * 0.48f, 0.12f, transform.forward, 1.35f, out _);
+            if (!centerBlocked)
+            {
+                if (!leftBlocked) leftBlocked = WorldSphereProbe(chest, 0.12f, -transform.right, 0.75f, out _);
+                if (!rightBlocked) rightBlocked = WorldSphereProbe(chest, 0.12f, transform.right, 0.75f, out _);
+            }
+            if (centerBlocked || leftBlocked != rightBlocked)
+            {
+                if (!leftBlocked && rightBlocked) targetLean = -1f;
+                else if (!rightBlocked && leftBlocked) targetLean = 1f;
+                else if (centerBlocked && !leftBlocked && !rightBlocked) targetLean = mv.x < -0.1f ? -1f : 1f;
+            }
+
+            // Auto-Lean vertical em cobertura baixa (agachado atras de mureta: ergue para mirar por cima)
+            if (actor.crouching)
+            {
+                bool lowCoverBlocked = WorldSphereProbe(transform.position + Vector3.up * 1.05f, 0.14f, transform.forward, 1.15f, out _);
+                bool highBlocked = WorldSphereProbe(transform.position + Vector3.up * 1.45f, 0.14f, transform.forward, 1.25f, out _);
+                if (lowCoverBlocked && !highBlocked)
+                {
+                    targetPeek = 1f;
+                    targetLean = 0f;
+                }
+            }
+        }
+        float k = 1f - Mathf.Exp(-12f * dt);
+        leanK = Mathf.Lerp(leanK, targetLean, k);
+        peekK = Mathf.Lerp(peekK, targetPeek, k);
+        if (Mathf.Abs(leanK) < 0.002f && targetLean == 0f) leanK = 0f;
+        if (peekK < 0.002f && targetPeek == 0f) peekK = 0f;
+    }
+
+    bool TryStartVault(Vector2 mv)
+    {
+        bool runningForward = isSprinting || (GameInput.Sprint && mv.y > 0.25f && !ads);
+        if (!runningForward || !cc.isGrounded || actor.prone || isVaulting || Time.time < vaultCooldownUntil) return false;
+        if (!WorldSphereProbe(transform.position + Vector3.up * 0.50f, 0.20f, transform.forward, 0.90f, out RaycastHit lowHit)) return false;
+        // Sonda alta em y + 1.38f (raio 0.18f -> base em 1.20m): livre sobre muretas de 1.15m, bloqueada em 1.50m+.
+        if (WorldSphereProbe(transform.position + Vector3.up * 1.38f, 0.18f, transform.forward, 1.05f, out _)) return false;
+
+        Vector3 topOrigin = new Vector3(lowHit.point.x, transform.position.y + 1.32f, lowHit.point.z) + transform.forward * 0.25f;
+        if (!WorldRayProbe(topOrigin, Vector3.down, 1.35f, out RaycastHit topHit)) return false;
+        float height = topHit.point.y - transform.position.y;
+        if (height < 0.35f || height > VaultMaxHeight + 0.03f) return false;
+
+        Vector3 landOrigin = new Vector3(lowHit.point.x, topHit.point.y + 0.35f, lowHit.point.z) + transform.forward * 1.15f;
+        float landY = WorldRayProbe(landOrigin, Vector3.down, 2.2f, out RaycastHit landHit) ? landHit.point.y : transform.position.y;
+        Vector3 topClear = new Vector3(lowHit.point.x, topHit.point.y + 0.05f, lowHit.point.z) + transform.forward * 0.35f;
+        Vector3 endClear = new Vector3(lowHit.point.x, landY + 0.05f, lowHit.point.z) + transform.forward * 1.15f;
+        if (Physics.CheckCapsule(topClear + Vector3.up * 0.38f, topClear + Vector3.up * 1.45f, 0.28f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) return false;
+        if (Physics.CheckCapsule(endClear + Vector3.up * 0.38f, endClear + Vector3.up * 1.45f, 0.28f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)) return false;
+
+        isVaulting = true;
+        vaultT = 0f;
+        vaultStart = transform.position;
+        vaultPeak = topClear + Vector3.up * 0.05f;
+        vaultEnd = endClear;
+        cc.enabled = false;
+        vy = 0f;
+        crouchToggle = false;
+        proneToggle = false;
+        actor.crouching = false;
+        actor.prone = false;
+        Sfx.UI("step", 0.45f, 0.85f);
+        return true;
+    }
+
+    void StepVault(float dt)
+    {
+        vaultT += dt / VaultDuration;
+        float t = Mathf.Clamp01(vaultT);
+        Vector3 p01 = Vector3.Lerp(vaultStart, vaultPeak, t);
+        Vector3 p12 = Vector3.Lerp(vaultPeak, vaultEnd, t);
+        transform.position = Vector3.Lerp(p01, p12, t);
+        cam.transform.localPosition = new Vector3(0f, 1.6f * actor.CrouchScale, 0f);
+        if (t >= 1f)
+        {
+            isVaulting = false;
+            cc.enabled = true;
+            vy = -2f;
+            hvel = transform.forward * (WalkSpeed * 0.6f);
+            vaultCooldownUntil = Time.time + VaultCooldown;
+        }
+    }
+
     void Move()
     {
         float dt = Time.deltaTime;
+        if (isVaulting) { StepVault(dt); return; }
         Vector2 mv = GameInput.Move;
         bool grounded = cc.isGrounded;
         Vector3 wish = transform.right * mv.x + transform.forward * mv.y;
         if (wish.sqrMagnitude > 1f) wish.Normalize();
 
-        // Agachar (segurar CTRL ou alternar com C no modo tatico; botao AGACHAR no celular). So levanta se tiver espaco em cima.
-        if (TacticalMode && GameInput.CrouchToggleDown) crouchToggle = !crouchToggle;
-        if (GameInput.JumpDown || (GameInput.Sprint && mv.y > 0.1f && !ads)) crouchToggle = false;
-        bool wantCrouch = GameInput.Crouch || crouchToggle;
-        if (!wantCrouch && actor.crouching && Physics.SphereCast(transform.position + Vector3.up * 0.9f, 0.3f, Vector3.up, out RaycastHit roofHit, 0.75f, ~0, QueryTriggerInteraction.Ignore)
+        // Postura unificada: Agachar (CTRL / C / toque curto) e Deitado - Prone (B / toque longo).
+        if (GameInput.ProneToggleDown)
+        {
+            proneToggle = !proneToggle;
+            if (proneToggle) crouchToggle = false;
+        }
+        if (TacticalMode && GameInput.CrouchToggleDown)
+        {
+            if (proneToggle || TouchPad.Prone) { proneToggle = false; TouchPad.Prone = false; crouchToggle = true; }
+            else crouchToggle = !crouchToggle;
+        }
+        if (GameInput.JumpDown || (GameInput.Sprint && mv.y > 0.1f && !ads))
+        {
+            crouchToggle = false;
+            proneToggle = false;
+            TouchPad.Prone = false;
+        }
+        bool wantProne = GameInput.Prone || proneToggle;
+        bool wantCrouch = !wantProne && (GameInput.Crouch || crouchToggle);
+        if (!wantProne && actor.prone && Physics.SphereCast(transform.position + Vector3.up * 0.45f, 0.28f, Vector3.up, out RaycastHit proneRoof, 0.65f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
+            && proneRoof.collider.GetComponentInParent<Actor>() != actor) wantProne = true;
+        if (!wantCrouch && !wantProne && actor.crouching && Physics.SphereCast(transform.position + Vector3.up * 0.9f, 0.3f, Vector3.up, out RaycastHit roofHit, 0.75f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
             && roofHit.collider.GetComponentInParent<Actor>() != actor) wantCrouch = true;
+        actor.prone = wantProne;
         actor.crouching = wantCrouch;
-        float ck = actor.crouchK;
-        cam.transform.localPosition = new Vector3(0f, Mathf.Lerp(1.6f, 1.02f, ck), 0f);
+
+        UpdateAutoLean(dt, mv);
+        float eyeY = 1.6f * actor.CrouchScale;
+        float wantLat = leanK * LeanMaxOffset;
+        if (Mathf.Abs(wantLat) > 0.005f)
+        {
+            Vector3 eyeWorld = transform.position + Vector3.up * eyeY;
+            Vector3 latDir = transform.right * Mathf.Sign(wantLat);
+            if (WorldSphereProbe(eyeWorld, 0.16f, latDir, Mathf.Abs(wantLat) + 0.08f, out RaycastHit camWall))
+                wantLat = Mathf.Sign(wantLat) * Mathf.Max(0f, camWall.distance - 0.05f);
+        }
+        float wantPeek = peekK * PeekMaxOffset;
+        if (wantPeek > 0.005f)
+        {
+            Vector3 eyeWorld = transform.position + Vector3.up * eyeY;
+            if (WorldSphereProbe(eyeWorld, 0.16f, Vector3.up, wantPeek + 0.08f, out RaycastHit camRoof))
+                wantPeek = Mathf.Max(0f, camRoof.distance - 0.05f);
+        }
+        if (!wasGrounded && grounded && prevVy < -4.2f)
+        {
+            float impact = Mathf.Clamp01((-prevVy - 4.2f) / 10f);
+            landDip = Mathf.Max(landDip, impact * 0.14f * WeaponWeight);
+            hvel *= 1f - impact * 0.35f;
+            Sfx.UI("step", 0.35f + impact * 0.25f, 0.72f);
+        }
+        wasGrounded = grounded;
+        landDip = Mathf.Lerp(landDip, 0f, 1f - Mathf.Exp(-14f * dt));
+
+        float hsCam = new Vector3(hvel.x, 0f, hvel.z).magnitude;
+        float bobScale = (grounded && hsCam > 0.6f) ? Mathf.Clamp01(hsCam / SprintSpeed) * (ads ? 0.25f : 1f) * (actor.prone ? 0.35f : 1f) : 0f;
+        float camBobX = Mathf.Cos(bobPhase) * 0.006f * bobScale;
+        float camBobY = (Mathf.Abs(Mathf.Sin(bobPhase)) - 0.5f) * 0.016f * bobScale;
+        cam.transform.localPosition = new Vector3(wantLat + camBobX, eyeY + wantPeek - Mathf.Abs(leanK) * 0.05f - landDip + camBobY, 0f);
+
+        if (TryStartVault(mv)) return;
 
         bool aurora = !TacticalMode && actor.agent == 5;
         WeaponDef w = Weapons.All[cur];
         bool firingHeld = w.auto ? GameInput.Fire : GameInput.FireDown;
-        bool wantSprint = GameInput.Sprint && mv.y > 0.1f && !ads && !actor.crouching && grounded;
+        bool wantSprint = GameInput.Sprint && mv.y > 0.1f && !ads && !actor.crouching && !actor.prone && grounded;
         if (wantSprint && !firingHeld && Time.time >= sprintBlockUntil)
         {
             isSprinting = true;
@@ -505,7 +727,8 @@ public class PlayerController : MonoBehaviour
         // Velocidade base reduzida em 20% no modo tatico + multiplicadores direcionais continuos (1.0 frente, 0.8 strafe, 0.7 recuo)
         float speed = ads ? AdsSpeed : (isSprinting ? (aurora ? 9.2f : SprintSpeed) : (aurora ? 6.4f : WalkSpeed));
         if (aurora && Time.time < speedBoostUntil) speed *= 1.3f;
-        if (actor.crouching) speed = Mathf.Min(speed, CrouchSpeed);
+        if (actor.prone) speed = Mathf.Min(speed, ProneSpeed);
+        else if (actor.crouching) speed = Mathf.Min(speed, CrouchSpeed);
 
         float dirMult = 1f;
         float magSq = mv.x * mv.x + mv.y * mv.y;
@@ -519,19 +742,31 @@ public class PlayerController : MonoBehaviour
         }
         speed *= dirMult * actor.MoveSpeedMult;
 
-        // Curvas reais de aceleracao (0.15s) e desaceleracao (0.12s)
+        // Inercia tatica (estilo Tarkov/Wardogs): massa por arma + frenagem de contra-strafe ao inverter direcao.
         Vector3 targetVel = wish * speed;
         float airMult = grounded ? 1f : 0.35f;
-        if (wish.sqrMagnitude < 0.0001f || Vector3.Dot(hvel, targetVel) < -0.01f)
+        float wMass = WeaponWeight;
+        float dot = Vector3.Dot(hvel, targetVel);
+        if (wish.sqrMagnitude < 0.0001f)
         {
             float decelRef = Mathf.Max(hvel.magnitude, WalkSpeed);
-            hvel = Vector3.MoveTowards(hvel, Vector3.zero, (decelRef / DecelTime) * airMult * dt);
+            float rate = (decelRef / (DecelTime * wMass)) * airMult;
+            hvel = Vector3.Lerp(hvel, Vector3.zero, 1f - Mathf.Exp(-12f * airMult * dt / wMass));
+            hvel = Vector3.MoveTowards(hvel, Vector3.zero, rate * 0.55f * dt);
+        }
+        else if (dot < -0.05f && hvel.magnitude > 1.8f)
+        {
+            float counterRate = (Mathf.Max(hvel.magnitude, WalkSpeed) / (DecelTime * 1.45f * wMass)) * airMult;
+            hvel = Vector3.MoveTowards(hvel, Vector3.zero, counterRate * dt);
         }
         else
         {
             float accelRef = Mathf.Max(speed, WalkSpeed);
-            hvel = Vector3.MoveTowards(hvel, targetVel, (accelRef / AccelTime) * airMult * dt);
+            float rate = (accelRef / (AccelTime * wMass)) * airMult;
+            hvel = Vector3.Lerp(hvel, targetVel, 1f - Mathf.Exp(-11f * airMult * dt / wMass));
+            hvel = Vector3.MoveTowards(hvel, targetVel, rate * 0.55f * dt);
         }
+        prevVy = vy;
 
         if (grounded)
         {
@@ -619,7 +854,8 @@ public class PlayerController : MonoBehaviour
         bloom = Mathf.Max(0f, bloom - 5f * Time.deltaTime);
         float moveFrac = Mathf.Clamp01(new Vector3(hvel.x, 0f, hvel.z).magnitude / SprintSpeed);
         curSpread = (ads ? w.adsSpread : w.spread) + bloom * (ads ? 0.4f : 1f) + moveFrac * (ads ? 0.45f : 2.2f) + (isSprinting ? 2.5f : 0f) + (cc.isGrounded ? 0f : 3.2f);
-        if (actor.crouchK > 0.5f && cc.isGrounded) curSpread *= 0.65f;   // agachado: tiro mais preciso
+        if (actor.proneK > 0.5f && cc.isGrounded) curSpread *= 0.40f;   // deitado: maxima estabilidade/precisao
+        else if (actor.crouchK > 0.5f && cc.isGrounded) curSpread *= 0.65f;   // agachado: tiro mais preciso
 
         if (reloading)
         {
@@ -697,7 +933,7 @@ public class PlayerController : MonoBehaviour
         }
         if (anyHit) Game.I.Hitmarker(anyHead, anyKill);
 
-        float k = ads ? 0.65f : 1f;
+        float k = (ads ? 0.65f : 1f) * (actor.proneK > 0.5f ? 0.65f : 1f);
         recoilOffset += w.recoilPitch * k;
         yaw += Random.Range(-w.recoilYaw, w.recoilYaw) * k;
         bloom = Mathf.Min(3.5f, bloom + w.bloom);
@@ -798,7 +1034,7 @@ public class PlayerController : MonoBehaviour
         Vector3 hip = new Vector3(0.28f, -0.2f, 0.15f);   // perto da camera, como em CS/Valorant
         // Plasma: arma mais baixa ao mirar (as bobinas luminosas tampavam a visao); mira de ponto na tela.
         Vector3 aim = new Vector3(0f, cur == 0 ? -0.118f : (cur == 1 ? -0.07f : (cur == 4 ? -0.14f : -0.1f)), 0.16f);
-        Vector3 target = (ads ? aim : hip) + bob + new Vector3(0f, 0f, -0.07f * vmKick) + WeaponArt.SprintPosOffset * sprintK;
+        Vector3 target = (ads ? aim : hip) + bob + new Vector3(swayLag.x, swayLag.y - landDip * 0.55f, -0.07f * vmKick) + WeaponArt.SprintPosOffset * sprintK;
         float lower = 0f;
         if (Time.time < equipReady) lower = (equipReady - Time.time) / 0.35f;
         target += new Vector3(0f, -0.22f * lower, 0f);
@@ -818,6 +1054,6 @@ public class PlayerController : MonoBehaviour
         cantK = Mathf.Lerp(cantK, ads ? 0f : 1f, 1f - Mathf.Exp(-14f * dt));   // no quadril a arma fica levemente virada
         float cant = cantK;
         Vector3 spRot = WeaponArt.SprintRotOffset * sprintK;
-        vmRoot.localRotation = Quaternion.Euler(-4f * vmKick + 35f * lower + dRot.x + spRot.x, dRot.y - 6f * cant + spRot.y, dRot.z - 4f * cant + spRot.z);
+        vmRoot.localRotation = Quaternion.Euler(-4f * vmKick + 35f * lower + dRot.x + spRot.x - swayLag.y * 110f, dRot.y - 6f * cant + spRot.y + swayLag.x * 110f, dRot.z - 4f * cant + spRot.z + strafeTilt * 1.4f);
     }
 }

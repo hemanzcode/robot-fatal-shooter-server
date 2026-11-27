@@ -423,7 +423,8 @@ public class AgentBody : MonoBehaviour
             want = Mathf.Clamp(want, -70f, 70f);
         }
         yaw = Mathf.LerpAngle(yaw, want, 1f - Mathf.Exp(-9f * dt));
-        model.transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
+        float proneTilt = owner != null ? owner.proneK * 78f : 0f;
+        model.transform.localRotation = Quaternion.Euler(proneTilt, yaw, 0f);
 
         if (proceduralRig) { UpdateProceduralPose(dt); return; }
         if (!graph.IsValid()) return;
@@ -474,7 +475,8 @@ public class AgentBody : MonoBehaviour
             target = Mathf.Abs(delta) < 0.45f ? Mathf.Clamp(footOff + delta, -0.3f, 0.12f) : footOff;   // pulando/caindo: mantem
         }
         footOff = Mathf.Lerp(footOff, target, 1f - Mathf.Exp(-14f * Time.deltaTime));
-        model.transform.localPosition = new Vector3(0f, footOff, 0f);
+        float proneLift = owner != null ? owner.proneK * 0.28f : 0f;
+        model.transform.localPosition = new Vector3(0f, footOff + proneLift, 0f);
 #if UNITY_EDITOR
         if (!footLogged && Time.time > 6f && best < float.MaxValue) { footLogged = true; Debug.Log("[pes] " + (def != null ? def.name : "?") + " ajuste=" + footOff.ToString("0.000") + " tornozelo=" + ankle.ToString("0.000") + " chao=" + best.ToString("0.00") + " malhaMin=" + MeshMin().ToString("0.000") + " peOsso=" + Mathf.Min(footL.position.y, footR.position.y).ToString("0.000")); }
 #endif

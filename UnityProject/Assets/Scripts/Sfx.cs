@@ -106,6 +106,16 @@ public static class Sfx
                 return Make(id, 0.5f, t => (Saw(70f, t) * 0.25f + Saw(140.5f, t) * 0.12f) * (0.7f + 0.3f * Mathf.Sin(TAU * 35f * t)));
             case "beep":
                 return Make(id, 0.12f, t => Mathf.Sin(TAU * 2100f * t) * Mathf.Exp(-t * 18f) * 0.6f);
+            case "radio":
+                // Chiado curto de squelch + duplo bip tatico de comunicacao.
+                return Make(id, 0.24f, t =>
+                {
+                    lp += (Noise() - lp) * 0.35f;
+                    float squelch = (t < 0.04f || t > 0.19f) ? lp * 0.45f : lp * 0.08f;
+                    float b1 = t >= 0.04f && t < 0.10f ? Mathf.Sin(TAU * 1850f * t) * 0.5f : 0f;
+                    float b2 = t >= 0.12f && t < 0.18f ? Mathf.Sin(TAU * 2250f * t) * 0.55f : 0f;
+                    return squelch + b1 + b2;
+                });
             case "roar":
                 return Make(id, 1.6f, t =>
                 {
