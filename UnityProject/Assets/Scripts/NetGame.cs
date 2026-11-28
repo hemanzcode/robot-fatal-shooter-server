@@ -410,7 +410,7 @@ public class NetGame : MonoBehaviour
     // Portoes (mapa NO GELO): estado de todos, "K;0101...".
     public static void SendGates() { if (IsHost && Net.I != null) Net.I.SendGame(0, "K;" + Gate.State()); }
 
-    // Paredes da CASA: quem quebrou avisa todos ("W;id;placas"); "W;R" refaz as paredes.
+    // Paredes da CASA: quem quebrou avisa todos ("BW;id;placas"); "BW;R" refaz as paredes.
     public static void SendWalls(string d) { if (I != null && !I.applying && Net.I != null) Net.I.SendGame(0, d); }
 
     public static void OpenCrate() { if (IsClient) Net.I.SendGame(-1, "O"); }
@@ -427,7 +427,7 @@ public class NetGame : MonoBehaviour
         {
             if (a[0] == "V") { if (a.Length > 1) VoiceChat.Incoming(from, a[1]); }
             else if (a[0] == "G") ShowPing(g, a);
-            else if (a[0] == "W") Breakable.FromNet(a);
+            else if (a[0] == "BW") Breakable.FromNet(a);   // paredes da CASA ("W" e a foto da partida que o host manda)
             else if (host) FromClient(g, from, a); else if (from == Net.I.roomHost || a[0] == "T" || a[0] == "L") FromHost(g, from, a);
         }
         finally { applying = false; }

@@ -62,7 +62,7 @@ public class BombMode : MonoBehaviour
         if (bombObj != null) Destroy(bombObj);
         if (dropObj != null) Destroy(dropObj);
         plantProg = defuseProg = 0f;
-        if (round > 1) { Breakable.ResetAll(); NetGame.SendWalls("W;R"); }   // CASA: paredes inteiras a cada rodada
+        if (round > 1) { Breakable.ResetAll(); NetGame.SendWalls("BW;R"); }   // CASA: paredes inteiras a cada rodada
         Game.I.RespawnAll();
         phase = Phase.Freeze;
         phaseEnd = Time.time + 4f;

@@ -3,7 +3,7 @@ using UnityEngine;
 
 // Parede que abre buracos: feita de placas (~0,5 x 0,47 m). Tiros gastam a placa atingida; explosoes arrancam
 // as placas em volta. Sem pedacos com fisica: a placa some com um pouco de poeira e a parede vira uma malha so.
-// Online, quem quebra avisa os outros ("W;id;placas") e todo mundo ve o mesmo buraco.
+// Online, quem quebra avisa os outros ("BW;id;placas") e todo mundo ve o mesmo buraco.
 public class Breakable : MonoBehaviour
 {
     public static readonly List<Breakable> All = new List<Breakable>();
@@ -181,7 +181,7 @@ public class Breakable : MonoBehaviour
 
     void Break(List<int> ks, bool send)
     {
-        System.Text.StringBuilder sb = send ? new System.Text.StringBuilder("W;" + id + ";") : null;
+        System.Text.StringBuilder sb = send ? new System.Text.StringBuilder("BW;" + id + ";") : null;
         int n = 0;
         foreach (int k in ks)
         {
@@ -199,7 +199,7 @@ public class Breakable : MonoBehaviour
         if (sb != null) NetGame.SendWalls(sb.ToString());
     }
 
-    // Mensagem da rede: "W;R" refaz tudo, "W;id;k,k,k" quebra essas placas.
+    // Mensagem da rede: "BW;R" refaz tudo, "BW;id;k,k,k" quebra essas placas.
     public static void FromNet(string[] a)
     {
         if (a.Length < 2) return;
