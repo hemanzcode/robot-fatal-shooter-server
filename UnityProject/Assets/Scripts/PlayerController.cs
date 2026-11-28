@@ -1066,7 +1066,7 @@ public class PlayerController : MonoBehaviour
         vmKick = 1f;
         Fx.Flash(muzzles[cur], w.color);
         if (vms != null && vms[cur] != null) WeaponArt.Casing(cur, vms[cur].transform.TransformPoint(WeaponArt.Eject[cur]), vms[cur].transform.rotation, actor != null ? actor.velocity : Vector3.zero);
-        Sfx.UI(w.sound, cur == 2 ? 1f : 0.75f);
+        Sfx.UI(w.sound, w.sound == "rail" ? 0.55f : 1f);
     }
 
     void Abilities()

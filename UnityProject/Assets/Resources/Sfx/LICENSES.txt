@@ -1,0 +1,78 @@
+================================================================================
+LICENSES - Assets/Resources/Sfx/ (100% CC0 1.0 Universal / Public Domain)
+================================================================================
+Todos os arquivos de audio nesta pasta sao 100% livres para uso comercial sem
+exigencia de atribuicao (Creative Commons Zero v1.0 Universal - CC0 1.0).
+Cada clipe foi convertido para WAV Mono 44100 Hz 16-bit PCM, com corte de
+silencio inicial (< 3ms de ataque) e normalizacao natural sem clipping.
+
+--------------------------------------------------------------------------------
+1. THE FREE FIREARM SOUND LIBRARY (CC0 1.0 Universal)
+--------------------------------------------------------------------------------
+Autores: Ben Jaszczak, Brian Nelson, Kevin Heras, Matthew Nanney
+Licenca: CC0 1.0 Universal (https://creativecommons.org/publicdomain/zero/1.0/)
+Repositorio de origem: https://github.com/buddingmonkey/FreeFirearmsSFXLibrary
+
+Tiros (Prepared SFX):
+- rifle_0..3.wav    <- Prepared SFX/AR-15, AK-47, Savage 10, SKS (100% naturais)
+- rifle_far_0.wav   <- Prepared SFX/AR-15/D_24P.wav (AR-15 5.56, mid/far)
+- rifle_far_1.wav   <- Prepared SFX/AK-47/C_31P.wav (AK-47 7.62x39, mid/far)
+- rifle_far_2.wav   <- Prepared SFX/SKS/U_19P.wav (SKS 7.62x39, mid/far)
+- smg_0..3.wav, smg_far_0..2.wav <- Carl Gustav M45 & PPSh
+- shotgun_0..3.wav, shotgun_far_0..2.wav <- Mossberg, Benelli Nova, Model 12, CD (100% naturais)
+- sniper_0..3.wav   <- Prepared SFX/Tikka/W_29P.wav (Tikka T3 .30-06, near, 4 variacoes coesas)
+- sniper_far_0..2.wav <- Tikka, Mosin Nagant, Arisaka (mid/far)
+- pistol_0..3.wav, pistol_far_0..2.wav <- Walther PPQ, 1911, Bersa, S&W 642
+
+Foley Mecanico Real de Estudio (Master Tracks):
+- magout_0.wav      <- Master Tracks/AR-15/D_5.wav (detach loaded mag)
+- magout_1.wav      <- Master Tracks/AR-15/D_3.wav (detach empty mag)
+- magout_2.wav      <- Master Tracks/AK-47/C_11.wav (detach empty mag)
+- magin_0.wav       <- Master Tracks/AR-15/D_4.wav (insert loaded mag)
+- magin_1.wav       <- Master Tracks/AR-15/D_2.wav (insert empty mag)
+- magin_2.wav       <- Master Tracks/AK-47/C_10.wav (insert empty mag)
+- charge_0.wav      <- Master Tracks/AR-15/D_14.wav (full rack loaded mag)
+- charge_1.wav      <- Master Tracks/AR-15/D_13.wav (drop bolt loaded)
+- charge_2.wav      <- Master Tracks/AK-47/C_14.wav (full cycle empty mag)
+- pump_0.wav        <- Master Tracks/Nova/O_6.wav (Benelli Nova 12g full cycle loaded)
+- pump_1.wav        <- Master Tracks/Nova/O_2.wav (Benelli Nova 12g full cycle empty)
+- shell_0.wav       <- Master Tracks/Nova/O_7.wav (insert round into chamber)
+- shell_1.wav       <- Master Tracks/Nova/O_3.wav (load mag)
+- rocketin_0.wav    <- Master Tracks/1917/B_10.wav (Springfield 1917 full cycle)
+- rocketin_1.wav    <- Master Tracks/1917/B_14.wav (insert round into chamber)
+- cellout_0.wav     <- Master Tracks/1917/B_1.wav (bolt up)
+- cellout_1.wav     <- Master Tracks/1917/B_3.wav (bolt back)
+- cellin_0.wav      <- Master Tracks/1917/B_5.wav (bolt forward)
+- cellin_1.wav      <- Master Tracks/1917/B_6.wav (bolt down)
+
+--------------------------------------------------------------------------------
+2. CC0-PUBLIC-DOMAIN-SOUNDS (CC0 1.0 Universal)
+--------------------------------------------------------------------------------
+Licenca: CC0 1.0 Universal (https://creativecommons.org/publicdomain/zero/1.0/)
+Repositorio de origem: https://github.com/lavenderdotpet/CC0-Public-Domain-Sounds
+
+- hit_0.wav      <- https://freesound.org/s/778028/ (Small_Bullet_Very_Soft_Hit_07)
+- hit_1.wav      <- https://freesound.org/s/789388/ (Bullet impact)
+- headshot_0.wav <- https://freesound.org/s/660769/ (Headshot sound)
+- headshot_1.wav <- https://freesound.org/s/267893/ (Bullet Hit Metal)
+
+--------------------------------------------------------------------------------
+3. FREESOUND.ORG - VERIFICADOS CC0 1.0 UNIVERSAL
+--------------------------------------------------------------------------------
+Licenca: CC0 1.0 Universal (https://creativecommons.org/publicdomain/zero/1.0/)
+
+- sniper_0..3.wav     <- https://freesound.org/s/855597/ (Barrett M82A1 .50 Cal + cauda limpa)
+- explosion_0..3.wav  <- https://freesound.org/s/609587/, 516914, 232398, 165910
+- explosion_far_0..2  <- https://freesound.org/s/843249/, 235968, 563010
+- rocket_0..1.wav     <- https://freesound.org/s/521377/, 857959
+- rocket_far_0..1.wav <- https://freesound.org/s/730041/, 211617
+- flesh_0..2.wav      <- https://freesound.org/s/868717/, 496187, 276600 (BodyHit_4, Body thud, body_hit)
+- rifle_0..3.wav      <- Freesound CC0 single-shot (881733/369782/386845/384687)
+- shotgun_0..3.wav    <- Freesound CC0 single-shot (668353/163455/564480)
+- empty_0..1.wav      <- https://freesound.org/s/182235/, 460852
+
+--------------------------------------------------------------------------------
+4. PLASMA DISCRETO (CC0 / ORIGINAL DO PROJETO)
+--------------------------------------------------------------------------------
+- rail_0..1.wav, rail_far_0..1.wav (pulso energetico discreto e limpo)
+- flyby_0..2.wav (N-wave sonic boom estilo Arma 3 >= 30m), flyby_near_0..2.wav (air-rip brando < 15m)

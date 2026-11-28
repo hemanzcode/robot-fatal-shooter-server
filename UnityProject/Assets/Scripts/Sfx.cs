@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// Tiros e explosoes sao gravacoes reais (Resources/Sfx, CC0: The Free Firearm Sound Library);
-// o resto (interface, mecanica, trilha) e sintetizado por codigo. Sem o arquivo gravado, cai no sintetizado.
+// Tiros, explosoes, flyby, impactos e mecanica sao gravacoes reais (Resources/Sfx, CC0 1.0);
+// o resto (interface, trilha, chuva) e sintetizado por codigo. Sem arquivo gravado, cai no sintetizado.
 public static class Sfx
 {
     const int SR = 44100;
@@ -69,6 +69,24 @@ public static class Sfx
                     float tail = lp * Mathf.Exp(-t * 15f) * 0.45f
                                + (t > 0.042f ? lp * Mathf.Exp(-(t - 0.042f) * 11f) * 0.25f : 0f)
                                + (t > 0.105f ? lp * Mathf.Exp(-(t - 0.105f) * 8f) * 0.16f : 0f);
+                    return punch + mech + tail;
+                });
+            case "smg":
+                return Make(id, 0.28f, t =>
+                {
+                    lp += (Noise() - lp) * 0.48f;
+                    float punch = Sweep(t, 190f, 55f, 0.09f) * Mathf.Exp(-t * 36f) * 0.65f;
+                    float mech = Clack(t, 0.001f, 2700f, 110f, 0.5f) + Noise() * Mathf.Exp(-t * 80f) * 0.45f;
+                    float tail = lp * Mathf.Exp(-t * 20f) * 0.35f;
+                    return punch + mech + tail;
+                });
+            case "pistol":
+                return Make(id, 0.32f, t =>
+                {
+                    lp += (Noise() - lp) * 0.45f;
+                    float punch = Sweep(t, 175f, 52f, 0.10f) * Mathf.Exp(-t * 32f) * 0.68f;
+                    float mech = Clack(t, 0.001f, 2500f, 100f, 0.48f) + Noise() * Mathf.Exp(-t * 72f) * 0.48f;
+                    float tail = lp * Mathf.Exp(-t * 17f) * 0.38f;
                     return punch + mech + tail;
                 });
             case "shotgun":
@@ -391,21 +409,31 @@ public static class Sfx
         return c;
     }
 
-    // Sons gravados (Resources/Sfx): cada id pode ter variacoes "id_1", "id_2"... sorteadas a cada toque.
-    // Tiros tem tambem a versao "id_far_N", gravada a media distancia, usada quando o disparo esta longe.
+    // Sons gravados (Resources/Sfx): cada id pode ter variacoes "id_0", "id_1"... sorteadas a cada toque.
+    // Tiros e explosoes tem tambem a versao "id_far_N", com transicao progressiva entre 20m e 45m.
     static readonly Dictionary<string, AudioClip[]> recorded = new Dictionary<string, AudioClip[]>();
     static readonly Dictionary<string, int> lastPick = new Dictionary<string, int>();
+    static readonly string[] RecordedKeys =
+    {
+        "rifle", "smg", "shotgun", "sniper", "pistol", "rocket", "rail",
+        "explosion", "flyby", "flyby_near", "flesh", "hit", "headshot",
+        "reload", "empty", "magout", "magin", "charge", "shell", "pump", "cellout", "cellin", "rocketin"
+    };
+    static readonly string[] FarKeys =
+    {
+        "rifle", "smg", "shotgun", "sniper", "pistol", "rocket", "rail", "explosion"
+    };
 
     static AudioClip[] Recorded(string id)
     {
         AudioClip[] arr;
         if (recorded.TryGetValue(id, out arr)) return arr;
         List<AudioClip> l = new List<AudioClip>();
-        for (int i = 1; i <= 6; i++)
+        for (int i = 0; i <= 7; i++)
         {
             AudioClip c = Resources.Load<AudioClip>("Sfx/" + id + "_" + i);
-            if (c == null) break;
-            l.Add(c);
+            if (c != null) l.Add(c);
+            else if (i > 0) break;
         }
         arr = l.ToArray();
         recorded[id] = arr;
@@ -423,7 +451,7 @@ public static class Sfx
         return arr[k];
     }
 
-    const int PoolSize = 24;
+    const int PoolSize = 32;
     static AudioSource[] pool3D;
     static int poolCursor;
     static AudioSource uiSource;
@@ -438,6 +466,7 @@ public static class Sfx
         uiSource.spatialBlend = 0f;
         uiSource.playOnAwake = false;
         uiSource.dopplerLevel = 0f;
+        uiSource.priority = 0;   // prioridade maxima para tiros/recargas em 1a pessoa
 
         pool3D = new AudioSource[PoolSize];
         for (int i = 0; i < PoolSize; i++)
@@ -471,48 +500,100 @@ public static class Sfx
         return fallback;
     }
 
+    static void Play3D(AudioClip clip, Vector3 pos, float vol, float pitch, float minDist, float maxDist, float delay = 0f)
+    {
+        if (clip == null || vol <= 0.001f) return;
+        AudioSource a = Acquire3D();
+        a.transform.position = pos;
+        a.clip = clip;
+        a.volume = vol;
+        a.pitch = pitch;
+        a.spatialBlend = 1f;
+        a.rolloffMode = AudioRolloffMode.Logarithmic;
+        a.minDistance = minDist;
+        a.maxDistance = maxDist;
+        a.dopplerLevel = 0f;
+        if (delay > 0.005f) a.PlayDelayed(delay);
+        else a.Play();
+    }
+
     // Carrega as gravacoes logo na abertura, para o primeiro tiro nao engasgar.
     public static void Warm()
     {
         EnsurePool();
-        foreach (string id in new[] { "rifle", "shotgun", "sniper", "rocket", "explosion" }) { Recorded(id); Recorded(id + "_far"); }
-        Get("rifle"); Get("shotgun"); Get("sniper"); Get("rail"); Get("rocket");
-        Get("flyby"); Get("hit"); Get("headshot"); Get("flesh"); Get("reload"); Get("empty");
+        for (int i = 0; i < RecordedKeys.Length; i++) Recorded(RecordedKeys[i]);
+        for (int i = 0; i < FarKeys.Length; i++) Recorded(FarKeys[i] + "_far");
+        Get("rifle"); Get("smg"); Get("shotgun"); Get("sniper"); Get("pistol");
+        Get("rail"); Get("rocket"); Get("explosion");
+        Get("flyby"); Get("flyby_near"); Get("hit"); Get("headshot"); Get("flesh"); Get("reload"); Get("empty");
     }
 
-    const float FarFrom = 38f;   // metros: daqui em diante toca a gravacao distante
+    const float NearTo = 20f;    // metros: ate aqui toca apenas o clipe proximo
+    const float FarFrom = 45f;   // metros: daqui em diante toca apenas a gravacao distante (_far)
 
     static void Spawn(string id, Vector3 pos, float vol, float pitch, float spatial)
     {
         EnsurePool();
-        bool gun = id == "rifle" || id == "shotgun" || id == "sniper" || id == "rocket" || id == "explosion" || id == "rail";
-        if (spatial > 0f && gun && Camera.main != null && Recorded(id + "_far").Length > 0
-            && (Camera.main.transform.position - pos).sqrMagnitude > FarFrom * FarFrom) id += "_far";
-        AudioClip clip = Pick(id);
-        float finalPitch = pitch * Random.Range(0.95f, 1.05f);
+        bool gun = id == "rifle" || id == "smg" || id == "shotgun" || id == "sniper" || id == "pistol"
+                || id == "rocket" || id == "explosion" || id == "rail";
+        float minP = (id == "flyby" || id == "flyby_near") ? 0.94f : 0.95f;
+        float maxP = (id == "flyby" || id == "flyby_near") ? 1.06f : 1.05f;
+        float finalPitch = pitch * Random.Range(minP, maxP);
         float finalVol = vol * Settings.sfx;
 
         if (spatial <= 0f)
         {
             uiSource.pitch = finalPitch;
-            uiSource.PlayOneShot(clip, finalVol);
+            uiSource.PlayOneShot(Pick(id), finalVol);
             return;
         }
 
-        AudioSource a = Acquire3D();
-        a.transform.position = pos;
-        a.clip = clip;
-        a.volume = finalVol;
-        a.pitch = finalPitch;
-        a.spatialBlend = 1f;
-        a.rolloffMode = AudioRolloffMode.Logarithmic;
-        a.minDistance = id == "flyby" ? 2f : (gun ? 5f : 2.5f);
-        a.maxDistance = id == "flyby" ? 30f : (gun ? 140f : 75f);
-        a.dopplerLevel = 0f;
-        a.Play();
+        bool isFlyby = id == "flyby" || id == "flyby_near";
+        float minDist = isFlyby ? 2f : (gun ? 5f : 2.5f);
+        float maxDist = isFlyby ? 30f : (gun ? 140f : 75f);
+
+        if (gun && Camera.main != null && Recorded(id + "_far").Length > 0)
+        {
+            float dist = Vector3.Distance(Camera.main.transform.position, pos);
+            float delay = dist > 15f ? (dist - 15f) / 340f : 0f;
+            if (dist >= FarFrom)
+            {
+                Play3D(Pick(id + "_far"), pos, finalVol, finalPitch, minDist, maxDist, delay);
+                return;
+            }
+            if (dist > NearTo)
+            {
+                float t = Mathf.InverseLerp(NearTo, FarFrom, dist);
+                float nearGain = Mathf.Cos(t * Mathf.PI * 0.5f);
+                float farGain = Mathf.Sin(t * Mathf.PI * 0.5f);
+                Play3D(Pick(id), pos, finalVol * nearGain, finalPitch, minDist, maxDist, delay);
+                Play3D(Pick(id + "_far"), pos, finalVol * farGain, finalPitch, minDist, maxDist, delay);
+                return;
+            }
+        }
+
+        Play3D(Pick(id), pos, finalVol, finalPitch, minDist, maxDist);
     }
 
     public static void At(string id, Vector3 pos, float vol = 1f, float pitch = 1f) { Spawn(id, pos, vol, pitch, 1f); }
     public static void UI(string id, float vol = 1f, float pitch = 1f) { Spawn(id, Vector3.zero, vol, pitch, 0f); }
-    public static void Flyby(Vector3 pos) { Spawn("flyby", pos, 0.85f, 1f, 1f); }
+    public static void Flyby(Vector3 pos, float shooterDist = 35f)
+    {
+        EnsurePool();
+        float p = Random.Range(0.94f, 1.06f);
+        float sfx = Settings.sfx;
+        if (shooterDist <= 15f)
+        {
+            Play3D(Pick("flyby_near"), pos, 0.35f * sfx, p, 2f, 30f);
+            return;
+        }
+        if (shooterDist >= 30f)
+        {
+            Play3D(Pick("flyby"), pos, 0.90f * sfx, p, 2f, 30f);
+            return;
+        }
+        float t = Mathf.InverseLerp(15f, 30f, shooterDist);
+        Play3D(Pick("flyby_near"), pos, 0.35f * Mathf.Cos(t * Mathf.PI * 0.5f) * sfx, p, 2f, 30f);
+        Play3D(Pick("flyby"), pos, 0.90f * Mathf.Sin(t * Mathf.PI * 0.5f) * sfx, p, 2f, 30f);
+    }
 }

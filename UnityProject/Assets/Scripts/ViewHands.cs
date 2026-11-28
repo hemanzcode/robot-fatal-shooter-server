@@ -28,6 +28,7 @@ public class ViewHands
     Vector3[] magHome;
     bool[] magFound;
     float lastT = -1f;
+    float lastShotT = 999f;
     int lastW = -1;
     bool startedEmpty;
 
@@ -285,7 +286,7 @@ public class ViewHands
         if (side) hLs.localScale = SideScale[w];
         if (hLs.gameObject.activeSelf != (show && side)) hLs.gameObject.SetActive(show && side);
         if (hL.gameObject.activeSelf != (show && !side)) hL.gameObject.SetActive(show && !side);
-        if (w != lastW) { lastT = -1f; lastW = w; }
+        if (w != lastW) { lastT = -1f; lastShotT = 999f; lastW = w; }
         if (reloadT < 0f) lastT = -1f;
         else if (lastT < 0f) { lastT = 0f; startedEmpty = empty; }
 
@@ -311,6 +312,11 @@ public class ViewHands
         else
         {
             // Bomba da escopeta / ferrolho da sniper depois de cada tiro.
+            if (sinceShot < lastShotT) lastShotT = 0f;
+            if (w == 1 && lastShotT < 0.14f && sinceShot >= 0.14f) Sfx.UI("pump", 0.72f);
+            if (w == 2 && lastShotT < 0.34f && sinceShot >= 0.34f) Sfx.UI("charge", 0.65f);
+            lastShotT = sinceShot;
+
             if (w == 1 && sinceShot > 0.12f && sinceShot < 0.55f)
             {
                 float u = (sinceShot - 0.12f) / 0.43f;

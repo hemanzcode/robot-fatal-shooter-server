@@ -48,7 +48,7 @@ public static class Weapons
         new WeaponDef { name = "SNIPER", sound = "sniper", damage = 80f, headMult = 2f, chestMult = 1.15f, interval = 1.5f, magSize = 5, reserve = 20, reloadTime = 3.1f,
                         spread = 3.2f, adsSpread = 0f, bloom = 0f, recoilPitch = 6.5f, recoilYaw = 1.1f, range = 600f, zoomFov = 18f,
                         sprintToFire = 0f, dropoffStart = 9999f, dropoffEnd = 10000f, minDamageMult = 1f, color = new Color(1f, 0.85f, 0.55f) },
-        new WeaponDef { name = "BAZUCA", sound = "rocket", damage = 90f, interval = 1f, magSize = 3, reserve = 9, reloadTime = 2.8f,
+        new WeaponDef { name = "BAZUCA", sound = "rocket", damage = 90f, interval = 1f, magSize = 1, reserve = 11, reloadTime = 2.8f,
                         spread = 0.3f, adsSpread = 0.1f, bloom = 0f, recoilPitch = 3f, recoilYaw = 0.5f, projectile = true, projSpeed = 48f, projRadius = 6.5f, zoomFov = 72f,
                         sprintToFire = 0f, dropoffStart = 9999f, dropoffEnd = 10000f, minDamageMult = 1f, color = new Color(1f, 0.6f, 0.2f) },
         new WeaponDef { name = "PLASMA", sound = "rail", damage = 35f, headMult = 1.5f, chestMult = 1.15f, interval = 0.15f, magSize = 40, reserve = 160, reloadTime = 2.2f,
@@ -68,7 +68,7 @@ public static class Weapons
         new WeaponDef { name = "SNIPER", sound = "sniper", damage = 80f, headMult = 2f, chestMult = 1.15f, interval = 1.35f, magSize = 5, reserve = 20, reloadTime = 3.1f,
                         spread = 3.2f, adsSpread = 0f, bloom = 0f, recoilPitch = 6.5f, recoilYaw = 1.1f, range = 600f, zoomFov = 18f,
                         sprintToFire = 0.45f, dropoffStart = 100f, dropoffEnd = 300f, minDamageMult = 0.85f, color = new Color(1f, 0.85f, 0.55f) },
-        new WeaponDef { name = "BAZUCA", sound = "rocket", damage = 95f, headMult = 2f, interval = 1f, magSize = 3, reserve = 9, reloadTime = 2.8f,
+        new WeaponDef { name = "BAZUCA", sound = "rocket", damage = 95f, headMult = 2f, interval = 1f, magSize = 1, reserve = 11, reloadTime = 2.8f,
                         spread = 0.3f, adsSpread = 0.1f, bloom = 0f, recoilPitch = 3f, recoilYaw = 0.5f, projectile = true, projSpeed = 48f, projRadius = 6.5f, zoomFov = 72f,
                         sprintToFire = 0.45f, dropoffStart = 30f, dropoffEnd = 80f, minDamageMult = 1f, color = new Color(1f, 0.6f, 0.2f) },
         new WeaponDef { name = "PLASMA", sound = "rail", damage = 30f, headMult = 2f, chestMult = 1.15f, interval = 0.135f, magSize = 40, reserve = 160, reloadTime = 2.2f,
@@ -219,14 +219,17 @@ public static class Combat
         return dmg * Mathf.Lerp(maxMult, w.minDamageMult, t);
     }
 
+    static float lastFlybyAt = -10f;
+
     /// <summary>
-    /// Reproduz estalo supersonico/assobio 3D se um disparo inimigo cruzar a ate 2.0m da camera local sem acertar o jogador.
+    /// Reproduz estalo supersonico (>= 25m) ou assobio brando (< 25m) em 3D se um disparo inimigo cruzar a ate 2.0m da camera local.
     /// </summary>
     public static bool TryBulletFlyby(Actor shooter, Vector3 start, Vector3 end, bool hitLocalPlayer)
     {
         if (hitLocalPlayer || Game.I == null || Game.I.player == null || !Game.I.player.alive) return false;
         if (shooter == Game.I.player) return false;
         if (shooter != null && shooter.team == Game.I.player.team) return false;
+        if (Time.time - lastFlybyAt < 0.04f) return false;
         Camera cam = Game.I.pc != null && Game.I.pc.cam != null ? Game.I.pc.cam : Camera.main;
         if (cam == null) return false;
         Vector3 camPos = cam.transform.position;
@@ -237,8 +240,10 @@ public static class Combat
         Vector3 closest = start + ab * t;
         if ((closest - camPos).sqrMagnitude <= 4f) // raio de 2.0m
         {
+            lastFlybyAt = Time.time;
             flybyCount++;
-            Sfx.Flyby(closest);
+            float shooterDist = Vector3.Distance(shooter != null ? shooter.EyePos : start, camPos);
+            Sfx.Flyby(closest, shooterDist);
             return true;
         }
         return false;

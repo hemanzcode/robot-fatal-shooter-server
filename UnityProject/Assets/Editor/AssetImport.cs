@@ -47,16 +47,26 @@ public class AssetImport : AssetPostprocessor
         }
     }
 
-    // Sons gravados (tiros, explosoes): comprimidos, descomprimidos ao carregar para tocar sem atraso.
+    // Sons gravados (mobile-first): Mono, DecompressOnLoad; ADPCM para tiros/impactos curtos e Vorbis 75% para caudas longas.
     void OnPreprocessAudio()
     {
-        if (!assetPath.Replace('\\', '/').Contains("/Resources/Sfx/")) return;
+        string p = assetPath.Replace('\\', '/');
+        if (!p.Contains("/Resources/Sfx/")) return;
         AudioImporter ai = (AudioImporter)assetImporter;
-        ai.forceToMono = false;
+        ai.forceToMono = true;
+        string name = System.IO.Path.GetFileNameWithoutExtension(p).ToLowerInvariant();
+        bool longTail = name.StartsWith("explosion") || name.StartsWith("sniper") || name.Contains("_far");
         AudioImporterSampleSettings st = ai.defaultSampleSettings;
         st.loadType = AudioClipLoadType.DecompressOnLoad;
-        st.compressionFormat = AudioCompressionFormat.Vorbis;
-        st.quality = 0.6f;
+        if (longTail)
+        {
+            st.compressionFormat = AudioCompressionFormat.Vorbis;
+            st.quality = 0.75f;
+        }
+        else
+        {
+            st.compressionFormat = AudioCompressionFormat.ADPCM;
+        }
         ai.defaultSampleSettings = st;
     }
 

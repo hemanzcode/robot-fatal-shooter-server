@@ -152,14 +152,14 @@ public class Game : MonoBehaviour
         music.loop = true;
         music.spatialBlend = 0f;
         music.pitch = 1f;
-        music.volume = 0.24f * Settings.music;
+        music.volume = 0.18f * Settings.music;
         music.Play();
 
         rainAudio = gameObject.AddComponent<AudioSource>();
         rainAudio.clip = Sfx.Get("rain");
         rainAudio.loop = true;
         rainAudio.spatialBlend = 0f;
-        rainAudio.volume = Settings.rain ? 0.2f * Settings.sfx : 0f;
+        rainAudio.volume = Settings.rain ? 0.14f * Settings.sfx : 0f;
         rainAudio.Play();
 
         Sfx.UI("startup", 0.65f);
@@ -652,12 +652,12 @@ public class Game : MonoBehaviour
     void Update()
     {
         if (greybox) return;
-        music.volume = 0.24f * Settings.music;
+        music.volume = 0.18f * Settings.music;
         // Musica para quando o jogo esta pausado (menu de pausa/opcoes durante a partida).
         bool hold = state != State.Menu && menus != null && menus.IsOpen;
         if (hold && music.isPlaying) music.Pause();
         else if (!hold && !music.isPlaying) music.UnPause();
-        rainAudio.volume = Settings.rain && !Arena.Ice ? 0.2f * Settings.sfx : 0f;
+        rainAudio.volume = Settings.rain && !Arena.Ice ? 0.14f * Settings.sfx : 0f;
         UpdateRain();
         UpdateIceFog();
         Post.Tick();
