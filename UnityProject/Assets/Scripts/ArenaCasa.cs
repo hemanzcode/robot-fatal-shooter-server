@@ -15,6 +15,7 @@ public static partial class Arena
     const float WallH = 2.8f;
     // Piscina (retangulo no mundo)
     const float PoolX0 = -18f, PoolX1 = -13f, PoolZ0 = -4f, PoolZ1 = 6f, PoolDepth = 1.4f;
+    public static Vector3 PoolCenter { get { return new Vector3((PoolX0 + PoolX1) / 2f, 0f, (PoolZ0 + PoolZ1) / 2f); } }
 
     // Local da casa (u, v) -> mundo.
     static Vector3 CW(float u, float v)

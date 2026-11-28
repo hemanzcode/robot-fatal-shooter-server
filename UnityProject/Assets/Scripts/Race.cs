@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 // CORRIDA DA MONTANHA - easter egg do mapa A CASA.
-// Quem junta as 4 chaves (RaceKeys) e levado na hora para uma corrida descendo a montanha onde a casa fica,
+// Quem pega a chave da piscina (RaceKeys, so no treino) e levado na hora para uma corrida descendo a montanha onde a casa fica,
 // ate a praia la embaixo. Largada ja em movimento (pega de surpresa), 4 carros, sem itens: so pilotar.
 // A partida na CASA continua para os outros; no fim o jogador volta para ela.
 //
@@ -56,7 +56,7 @@ public class Race : MonoBehaviour
 
     static readonly string[] Rivals = { "VIPER", "NOVA", "TROVAO", "FALCAO", "RAIO", "SOMBRA" };
 
-    // Chamado quando o jogador junta as 4 chaves.
+    // Chamado quando o jogador pega a chave.
     public static void Begin(Actor human)
     {
         if (I != null || human == null || Game.I == null) return;
@@ -742,7 +742,7 @@ public class Race : MonoBehaviour
         if (t < 4f)
         {
             Game.Text(cx - 500f, 300f, 1000f, 90f, "CORRIDA DA MONTANHA!", 64, gold, TextAnchor.MiddleCenter);
-            Game.Text(cx - 500f, 380f, 1000f, 44f, "As 4 chaves abriram a estrada. Chegue primeiro na praia!", 26, Color.white, TextAnchor.MiddleCenter);
+            Game.Text(cx - 500f, 380f, 1000f, 44f, "A chave da piscina abriu a estrada. Chegue primeiro na praia!", 26, Color.white, TextAnchor.MiddleCenter);
         }
         if (t < 9f && !me.done)
             Game.Text(cx - 500f, 1080f - 60f, 1000f, 30f, TouchPad.On ? "Acelera sozinho  -  incline o direcional para virar  -  PULO derrapa  -  puxe para baixo para frear" : "W acelera   S freia   A / D vira   ESPACO derrapa", 18, new Color(1f, 1f, 1f, 0.8f), TextAnchor.MiddleCenter);
@@ -780,14 +780,16 @@ public class Race : MonoBehaviour
     }
 }
 
-// As 4 chaves escondidas no mapa A CASA. Sorteadas de novo a cada partida.
+// A chave da montanha no mapa A CASA (treino): fica boiando na piscina.
 // So jogador humano pega. (Treino: quem juntar as 4 sozinho corre contra 3 pilotos do jogo.
 // Online, com 4 pessoas diferentes, vem na proxima etapa.)
 public class RaceKeys : MonoBehaviour
 {
     public static RaceKeys I;
     readonly List<Transform> keys = new List<Transform>();
+    readonly List<float> baseY = new List<float>();
     int got;
+    const int need = 1;   // chaves para abrir a corrida (eram 4 sorteadas pelo mapa)
     float noteUntil;
 
     public static void Spawn()
@@ -810,7 +812,9 @@ public class RaceKeys : MonoBehaviour
         useGUILayout = false;
         Material gold = Art.Glow(new Color(1f, 0.78f, 0.2f), 1.2f);
         List<Vector3> picked = new List<Vector3>();
-        for (int tries = 0; tries < 400 && picked.Count < 4; tries++)
+        // Treino: uma chave so, boiando no meio da piscina. Pulou na piscina e pegou: corrida.
+        picked.Add(Arena.PoolCenter + Vector3.up * -0.45f);   // boia a ~0,45 m acima da agua: alcanca de dentro da piscina
+        for (int tries = 0; tries < 400 && picked.Count < need; tries++)
         {
             Vector3 p = Arena.RandomPoint();
             bool ok = true;
@@ -829,7 +833,9 @@ public class RaceKeys : MonoBehaviour
             Art.Box(k, new Vector3(0f, -0.12f, 0f), new Vector3(0.05f, 0.42f, 0.05f), gold, false, "haste");
             Art.Box(k, new Vector3(0.06f, -0.26f, 0f), new Vector3(0.09f, 0.05f, 0.04f), gold, false, "dente");
             Art.Box(k, new Vector3(0.05f, -0.17f, 0f), new Vector3(0.07f, 0.05f, 0.04f), gold, false, "dente");
+            Art.PointLight(k, Vector3.zero, new Color(1f, 0.8f, 0.3f), 4f, 1.2f);   // brilho para achar dentro da agua
             keys.Add(k);
+            baseY.Add(k.position.y);
         }
     }
 
@@ -841,36 +847,45 @@ public class RaceKeys : MonoBehaviour
 #if UNITY_EDITOR
         // So no editor: F10 abre a corrida direto (para testar sem cacar as chaves).
         if (Input.GetKeyDown(KeyCode.F10)) { Race.Begin(g.player); Clear(); return; }
+        // F11: pula para a borda da piscina (testar a chave).
+        if (Input.GetKeyDown(KeyCode.F11))
+        {
+            CharacterController pcc = g.player.GetComponent<CharacterController>();
+            if (pcc != null) pcc.enabled = false;
+            g.player.transform.position = Arena.PoolCenter + new Vector3(0f, 0.2f, -6.5f);
+            if (pcc != null) pcc.enabled = true;
+            if (g.pc != null) g.pc.SetYaw(0f);   // olhando para a piscina
+        }
 #endif
         for (int i = keys.Count - 1; i >= 0; i--)
         {
             Transform k = keys[i];
-            if (k == null) { keys.RemoveAt(i); continue; }
+            if (k == null) { keys.RemoveAt(i); baseY.RemoveAt(i); continue; }
             k.rotation = Quaternion.Euler(0f, t * 120f + i * 40f, 0f);
-            Vector3 p = k.position; p.y = Mathf.Floor(p.y) + 0.9f + Mathf.Sin(t * 2f + i) * 0.12f;
+            Vector3 p = k.position; p.y = baseY[i] + Mathf.Sin(t * 2f + i) * 0.12f;
             k.position = p;
             if (!g.player.alive || g.player.vehicle != null) continue;
             Vector3 d = g.player.transform.position + Vector3.up * 0.9f - k.position;
             if (d.sqrMagnitude < 1.6f * 1.6f)
             {
                 Destroy(k.gameObject);
-                keys.RemoveAt(i);
+                keys.RemoveAt(i); baseY.RemoveAt(i);
                 got++;
                 noteUntil = t + 4f;
                 Sfx.UI("pickup", 0.9f, 0.8f + got * 0.1f);
-                if (got >= 4) { Race.Begin(g.player); Clear(); return; }
+                if (got >= need) { Race.Begin(g.player); Clear(); return; }
             }
         }
     }
 
     void OnGUI()
     {
-        if (got == 0 || Game.I == null || Game.I.menus.IsOpen || Race.Active) return;
+        if (got == 0 || got >= need || Game.I == null || Game.I.menus.IsOpen || Race.Active) return;
         float s = Screen.height / 1080f;
         GUI.matrix = Matrix4x4.Scale(new Vector3(s, s, 1f));
         float y = 260f;
         Game.Fill(24f, y, 260f, 44f, new Color(0f, 0f, 0f, 0.55f));
-        Game.Text(36f, y, 240f, 44f, "CHAVES  " + got + " / 4", 22, new Color(1f, 0.82f, 0.25f), TextAnchor.MiddleLeft);
-        if (Time.time < noteUntil) Game.Text(24f, y + 46f, 520f, 26f, got < 4 ? "Uma chave misteriosa... faltam " + (4 - got) + "." : "", 16, new Color(1f, 1f, 1f, 0.75f), TextAnchor.MiddleLeft);
+        Game.Text(36f, y, 240f, 44f, "CHAVES  " + got + " / " + need, 22, new Color(1f, 0.82f, 0.25f), TextAnchor.MiddleLeft);
+        if (Time.time < noteUntil) Game.Text(24f, y + 46f, 520f, 26f, got < need ? "Uma chave misteriosa... faltam " + (need - got) + "." : "", 16, new Color(1f, 1f, 1f, 0.75f), TextAnchor.MiddleLeft);
     }
 }

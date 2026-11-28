@@ -58,6 +58,7 @@ public class PlayerController : MonoBehaviour
     public Actor actorForAbilities { get { return actor; } }
     CharacterController cc;
     float yaw, pitch, recoilOffset;
+    public void SetYaw(float y) { yaw = y; }   // teleporte de teste no editor
     Vector3 hvel;
     float vy;
     int jumps;
